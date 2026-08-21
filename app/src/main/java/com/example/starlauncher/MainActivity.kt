@@ -2,75 +2,97 @@ package com.example.starlauncher
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.appwidget.AppWidgetHost
-import android.appwidget.AppWidgetHostView
-import android.appwidget.AppWidgetManager
-import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioManager
+import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import android.widget.*
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import java.text.SimpleDateFormat
+import java.util.*
 
 class MainActivity : Activity() {
 
-    private val APPWIDGET_HOST_ID = 2048
-    private val REQUEST_PICK_APPWIDGET = 1001
-    private val REQUEST_CREATE_APPWIDGET = 1002
-
-    private lateinit var appWidgetManager: AppWidgetManager
-    private lateinit var appWidgetHost: AppWidgetHost
-    private lateinit var widgetContainer: LinearLayout
-
-    private lateinit var mainScroll: ScrollView
-    private lateinit var appContainer: LinearLayout
-    private lateinit var favoritesContainer: LinearLayout
-    private lateinit var foldersContainer: LinearLayout
-
     private val gson = Gson()
-    private val PREFS_NAME = "GrimoirePrefs"
-    private val KEY_FAVORITES = "fav_apps"
-    private val KEY_FOLDERS = "tome_folders"
+    private val PREFS = "StarLauncherStation"
+    private val KEY_FAVS = "key_favs"
+    private val KEY_FOLDERS = "key_folders"
+    private val KEY_TASKS = "key_tasks"
 
-    // High readability cosmic palette
-    private val COLOR_BG = Color.parseColor("#080B10")       // Deep abyssal black
-    private val COLOR_SURFACE = Color.parseColor("#121924")  // Vault dark slate
-    private val COLOR_ACCENT = Color.parseColor("#10B988")   // Eldritch jade
-    private val COLOR_AMBER = Color.parseColor("#F59E0B")    // Arcane gold
-    private val COLOR_TEXT = Color.parseColor("#F1F5F9")     // High contrast dyslexia-safe white
-    private val COLOR_MUTED = Color.parseColor("#94A3B8")    // Muted parchment silver
+    // High-readability cosmic palette
+    private val BG_COLOR = Color.parseColor("#080C10")
+    private val SURFACE_CARD = Color.parseColor("#121820")
+    private val ACCENT_JADE = Color.parseColor("#10B981")
+    private val ACCENT_EMBER = Color.parseColor("#F59E0B")
+    private val TEXT_PRIMARY = Color.parseColor("#F8FAFC")
+    private val TEXT_MUTED = Color.parseColor("#94A3B8")
 
     data class AppItem(val name: String, val packageName: String, val icon: Drawable?)
     data class FolderItem(val name: String, val glyph: String, val packages: MutableList<String>)
+    data class TaskItem(val id: Long, val text: String, var isDone: Boolean)
 
     private var allApps: List<AppItem> = emptyList()
     private var favoritePackages = mutableListOf<String>()
     private var folders = mutableListOf<FolderItem>()
+    private var taskList = mutableListOf<TaskItem>()
+
+    private lateinit var homeStationLayout: LinearLayout
+    private lateinit var drawerLayout: LinearLayout
+    private lateinit var drawerScroll: ScrollView
+    private lateinit var drawerAppContainer: LinearLayout
+    private lateinit var drawerHeaderTv: TextView
+    private lateinit var favoritesContainer: LinearLayout
+    private lateinit var foldersContainer: LinearLayout
+    private lateinit var tasksContainer: LinearLayout
+
+    private var vibrator: Vibrator? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        appWidgetManager = AppWidgetManager.getInstance(this)
-        appWidgetHost = AppWidgetHost(this, APPWIDGET_HOST_ID)
-        appWidgetHost.startListening()
+        vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+            vibratorManager?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
 
-        loadUserData()
-        buildUi()
+        loadData()
+        buildStationUi()
     }
 
-    private fun loadUserData() {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val favJson = prefs.getString(KEY_FAVORITES, null)
-        val folderJson = prefs.getString(KEY_FOLDERS, null)
+    private fun haptic() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator?.vibrate(20)
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun loadData() {
+        val p = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val favJson = p.getString(KEY_FAVS, null)
+        val folderJson = p.getString(KEY_FOLDERS, null)
+        val taskJson = p.getString(KEY_TASKS, null)
 
         favoritePackages = if (favJson != null) {
             gson.fromJson(favJson, object : TypeToken<MutableList<String>>() {}.type)
@@ -82,30 +104,41 @@ class MainActivity : Activity() {
             gson.fromJson(folderJson, object : TypeToken<MutableList<FolderItem>>() {}.type)
         } else {
             mutableListOf(
-                FolderItem("Tome of Comms", "🜏", mutableListOf()),
-                FolderItem("Vault of Tools", "🜂", mutableListOf())
+                FolderItem("Grimoire & Readers", "🕮", mutableListOf()),
+                FolderItem("Dev & Terminal Station", "⚙", mutableListOf()),
+                FolderItem("Comms & Intel", "👁", mutableListOf())
+            )
+        }
+
+        taskList = if (taskJson != null) {
+            gson.fromJson(taskJson, object : TypeToken<MutableList<TaskItem>>() {}.type)
+        } else {
+            mutableListOf(
+                TaskItem(1, "Configure Star Station", false),
+                TaskItem(2, "Review Worldbuilding Codex", false)
             )
         }
     }
 
-    private fun saveUserData() {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit()
-            .putString(KEY_FAVORITES, gson.toJson(favoritePackages))
+    private fun saveData() {
+        getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY_FAVS, gson.toJson(favoritePackages))
             .putString(KEY_FOLDERS, gson.toJson(folders))
+            .putString(KEY_TASKS, gson.toJson(taskList))
             .apply()
     }
 
-    private fun buildUi() {
-        val rootLayout = FrameLayout(this).apply {
-            setBackgroundColor(COLOR_BG)
+    private fun buildStationUi() {
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(BG_COLOR)
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
         }
 
-        mainScroll = ScrollView(this).apply {
+        // ================= HOME STATION VIEW =================
+        val stationScroll = ScrollView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -113,124 +146,395 @@ class MainActivity : Activity() {
             isVerticalScrollBarEnabled = false
         }
 
-        val contentLayout = LinearLayout(this).apply {
+        homeStationLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(56, 80, 80, 96) // Extra right padding for the alphabet bar
+            setPadding(48, 80, 88, 120)
         }
 
-        // --- HEADER ---
-        val header = TextView(this).apply {
-            text = "🜏  S T A R  L A U N C H E R"
-            setTextColor(COLOR_ACCENT)
+        homeStationLayout.addView(createGlanceWidget())
+        homeStationLayout.addView(createMediaCapsule())
+        homeStationLayout.addView(createTaskStation())
+
+        val favLabel = TextView(this).apply {
+            text = "★ INNER CIRCLE [FAVOURITES]"
+            setTextColor(ACCENT_EMBER)
+            textSize = 12f
+            letterSpacing = 0.15f
+            typeface = Typeface.MONOSPACE
+            setPadding(0, 32, 0, 16)
+        }
+        homeStationLayout.addView(favLabel)
+
+        favoritesContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        homeStationLayout.addView(favoritesContainer)
+
+        val foldLabel = TextView(this).apply {
+            text = "🜏 ARCHIVE TOMES"
+            setTextColor(ACCENT_JADE)
+            textSize = 12f
+            letterSpacing = 0.15f
+            typeface = Typeface.MONOSPACE
+            setPadding(0, 32, 0, 16)
+        }
+        homeStationLayout.addView(foldLabel)
+
+        foldersContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        homeStationLayout.addView(foldersContainer)
+
+        stationScroll.addView(homeStationLayout)
+        root.addView(stationScroll)
+
+        // ================= APP DRAWER OVERLAY =================
+        drawerLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(BG_COLOR)
+            visibility = View.GONE
+            alpha = 0f
+            setPadding(48, 80, 88, 96)
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
+
+        drawerHeaderTv = TextView(this).apply {
+            text = "ALL SANCTIONED APPS"
+            setTextColor(ACCENT_JADE)
             textSize = 18f
             letterSpacing = 0.15f
             typeface = Typeface.MONOSPACE
-            setPadding(0, 0, 0, 16)
+            setPadding(0, 0, 0, 24)
         }
-        contentLayout.addView(header)
+        drawerLayout.addView(drawerHeaderTv)
 
-        // --- WIDGET CONTAINER ---
-        widgetContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, 0, 0, 32)
-            setOnLongClickListener {
-                selectWidget()
-                true
-            }
+        drawerScroll = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            isVerticalScrollBarEnabled = false
         }
-        val widgetHint = TextView(this).apply {
-            text = "[ Hold to invoke Widget Shrine ]"
-            setTextColor(COLOR_MUTED)
-            textSize = 12f
-            typeface = Typeface.MONOSPACE
-            setPadding(0, 8, 0, 16)
-        }
-        widgetContainer.addView(widgetHint)
-        contentLayout.addView(widgetContainer)
+        drawerAppContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        drawerScroll.addView(drawerAppContainer)
+        drawerLayout.addView(drawerScroll)
 
-        // --- FAVORITES: "THE INNER CIRCLE" (MAX 6) ---
-        val favHeader = TextView(this).apply {
-            text = "★ INNER CIRCLE (FAVORITES)"
-            setTextColor(COLOR_AMBER)
-            textSize = 13f
-            letterSpacing = 0.1f
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, 16, 0, 16)
-        }
-        contentLayout.addView(favHeader)
+        root.addView(drawerLayout)
 
-        favoritesContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        contentLayout.addView(favoritesContainer)
+        // ================= NIAGARA WAVE RAIL =================
+        val alphabetRail = buildAlphabetRail()
+        root.addView(alphabetRail)
 
-        // --- TOMES / FOLDERS ---
-        val folderHeader = TextView(this).apply {
-            text = "🕮 ARCHIVES & TOMES"
-            setTextColor(COLOR_AMBER)
-            textSize = 13f
-            letterSpacing = 0.1f
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, 32, 0, 16)
-        }
-        contentLayout.addView(folderHeader)
-
-        foldersContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        contentLayout.addView(foldersContainer)
-
-        // --- ALL APPS STREAM ---
-        val streamHeader = TextView(this).apply {
-            text = "👁 ALL SANCTIONED APPS"
-            setTextColor(COLOR_ACCENT)
-            textSize = 13f
-            letterSpacing = 0.1f
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, 32, 0, 16)
-        }
-        contentLayout.addView(streamHeader)
-
-        appContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        contentLayout.addView(appContainer)
-
-        mainScroll.addView(contentLayout)
-        rootLayout.addView(mainScroll)
-
-        // --- NIAGARA-STYLE ALPHABET SCROLLER ---
-        val alphabetLayout = buildAlphabetScroller()
-        rootLayout.addView(alphabetLayout)
-
-        setContentView(rootLayout)
-        refreshAppList()
+        setContentView(root)
+        refreshAll()
     }
 
-    private fun refreshAppList() {
+    private fun createGlanceWidget(): View {
+        val glanceCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(32, 28, 32, 28)
+            background = cardDrawable(SURFACE_CARD, 20f)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            lp.setMargins(0, 0, 0, 24)
+            layoutParams = lp
+        }
+
+        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+        val dateFormat = SimpleDateFormat("EEEE, d MMMM", Locale.getDefault())
+
+        val timeTv = TextView(this).apply {
+            text = timeFormat.format(Date())
+            setTextColor(TEXT_PRIMARY)
+            textSize = 34f
+            typeface = Typeface.MONOSPACE
+        }
+
+        val dateTv = TextView(this).apply {
+            text = dateFormat.format(Date()).uppercase()
+            setTextColor(ACCENT_JADE)
+            textSize = 13f
+            letterSpacing = 0.12f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, 4, 0, 0)
+        }
+
+        glanceCard.addView(timeTv)
+        glanceCard.addView(dateTv)
+        return glanceCard
+    }
+
+    private fun createMediaCapsule(): View {
+        val capsule = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(28, 20, 28, 20)
+            background = cardDrawable(SURFACE_CARD, 20f)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            lp.setMargins(0, 0, 0, 24)
+            layoutParams = lp
+        }
+
+        val labelLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+
+        val title = TextView(this).apply {
+            text = "AUDIO DECK"
+            setTextColor(ACCENT_EMBER)
+            textSize = 11f
+            letterSpacing = 0.1f
+            typeface = Typeface.MONOSPACE
+        }
+        val sub = TextView(this).apply {
+            text = "Tap to invoke Player"
+            setTextColor(TEXT_MUTED)
+            textSize = 13f
+        }
+        labelLayout.addView(title)
+        labelLayout.addView(sub)
+        capsule.addView(labelLayout)
+
+        val playBtn = TextView(this).apply {
+            text = "▶ / ⏸"
+            setTextColor(TEXT_PRIMARY)
+            textSize = 18f
+            setPadding(24, 16, 24, 16)
+            setOnClickListener {
+                haptic()
+                val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                val down = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+                val up = KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+                am.dispatchMediaKeyEvent(down)
+                am.dispatchMediaKeyEvent(up)
+            }
+        }
+        capsule.addView(playBtn)
+
+        capsule.setOnClickListener {
+            haptic()
+            val spotifyIntent = packageManager.getLaunchIntentForPackage("com.spotify.music")
+            if (spotifyIntent != null) startActivity(spotifyIntent)
+            else Toast.makeText(this, "Spotify not detected", Toast.LENGTH_SHORT).show()
+        }
+
+        return capsule
+    }
+
+    private fun createTaskStation(): View {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(28, 24, 28, 24)
+            background = cardDrawable(SURFACE_CARD, 20f)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            lp.setMargins(0, 0, 0, 24)
+            layoutParams = lp
+        }
+
+        val topRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val title = TextView(this).apply {
+            text = "DIRECTIVES & TASKS"
+            setTextColor(ACCENT_JADE)
+            textSize = 12f
+            letterSpacing = 0.1f
+            typeface = Typeface.MONOSPACE
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val addBtn = TextView(this).apply {
+            text = "+ NEW"
+            setTextColor(ACCENT_EMBER)
+            textSize = 12f
+            typeface = Typeface.MONOSPACE
+            setPadding(16, 8, 16, 8)
+            setOnClickListener { showAddTaskDialog() }
+        }
+        topRow.addView(title)
+        topRow.addView(addBtn)
+        card.addView(topRow)
+
+        tasksContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 16, 0, 0)
+        }
+        card.addView(tasksContainer)
+        return card
+    }
+
+    private fun renderTasks() {
+        tasksContainer.removeAllViews()
+        for (task in taskList) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, 12, 0, 12)
+            }
+            val check = TextView(this).apply {
+                text = if (task.isDone) "▣" else "▢"
+                setTextColor(if (task.isDone) ACCENT_JADE else TEXT_MUTED)
+                textSize = 16f
+                setPadding(0, 0, 20, 0)
+            }
+            val tv = TextView(this).apply {
+                text = task.text
+                setTextColor(if (task.isDone) TEXT_MUTED else TEXT_PRIMARY)
+                textSize = 14f
+                if (task.isDone) paintFlags = paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
+            }
+            row.addView(check)
+            row.addView(tv)
+
+            row.setOnClickListener {
+                haptic()
+                task.isDone = !task.isDone
+                saveData()
+                renderTasks()
+            }
+            row.setOnLongClickListener {
+                haptic()
+                taskList.remove(task)
+                saveData()
+                renderTasks()
+                true
+            }
+            tasksContainer.addView(row)
+        }
+    }
+
+    private fun showAddTaskDialog() {
+        val input = EditText(this).apply {
+            hint = "Enter directive..."
+            setTextColor(TEXT_PRIMARY)
+            setHintTextColor(TEXT_MUTED)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Add Directive")
+            .setView(input)
+            .setPositiveButton("Engrave") { _, _ ->
+                val txt = input.text.toString().trim()
+                if (txt.isNotEmpty()) {
+                    taskList.add(TaskItem(System.currentTimeMillis(), txt, false))
+                    saveData()
+                    renderTasks()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun buildAlphabetRail(): View {
+        val rail = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            layoutParams = FrameLayout.LayoutParams(72, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END)
+            setPadding(0, 48, 8, 48)
+        }
+
+        val chars = listOf('★') + ('A'..'Z').toList()
+        for (c in chars) {
+            val tv = TextView(this).apply {
+                text = c.toString()
+                setTextColor(TEXT_MUTED)
+                textSize = 10f
+                typeface = Typeface.MONOSPACE
+                gravity = Gravity.CENTER
+                setPadding(4, 2, 4, 2)
+            }
+            rail.addView(tv)
+        }
+
+        rail.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                    val childCount = rail.childCount
+                    val y = event.y.coerceIn(0f, rail.height.toFloat())
+                    val index = ((y / rail.height) * childCount).toInt().coerceIn(0, childCount - 1)
+                    val letter = chars[index]
+                    haptic()
+                    if (letter == '★') {
+                        hideAppDrawer()
+                    } else {
+                        showAppDrawer(letter)
+                    }
+                    true
+                }
+                else -> true
+            }
+        }
+        return rail
+    }
+
+    private fun showAppDrawer(filterChar: Char? = null) {
+        if (drawerLayout.visibility != View.VISIBLE) {
+            drawerLayout.visibility = View.VISIBLE
+            drawerLayout.animate().alpha(1f).setDuration(150).setInterpolator(DecelerateInterpolator()).start()
+        }
+        filterAndRenderDrawer(filterChar)
+    }
+
+    private fun hideAppDrawer() {
+        if (drawerLayout.visibility == View.VISIBLE) {
+            drawerLayout.animate().alpha(0f).setDuration(120).withEndAction {
+                drawerLayout.visibility = View.GONE
+            }.start()
+        }
+    }
+
+    private fun filterAndRenderDrawer(filterChar: Char?) {
+        drawerAppContainer.removeAllViews()
+        val filtered = if (filterChar == null) allApps else allApps.filter { it.name.startsWith(filterChar, ignoreCase = true) }
+
+        drawerHeaderTv.text = if (filterChar != null) "APPS // SECTOR $filterChar" else "ALL SANCTIONED APPS"
+
+        if (filtered.isEmpty()) {
+            val emptyTv = TextView(this).apply {
+                text = "No apps bound to sector '$filterChar'"
+                setTextColor(TEXT_MUTED)
+                textSize = 14f
+                setPadding(0, 32, 0, 0)
+            }
+            drawerAppContainer.addView(emptyTv)
+            return
+        }
+
+        for (app in filtered) {
+            drawerAppContainer.addView(createAppRowView(app))
+        }
+    }
+
+    private fun refreshAll() {
         allApps = loadInstalledApps()
         renderFavorites()
         renderFolders()
-        renderAllApps()
+        renderTasks()
     }
 
     private fun renderFavorites() {
         favoritesContainer.removeAllViews()
-        val favApps = allApps.filter { favoritePackages.contains(it.packageName) }.take(6)
-
-        if (favApps.isEmpty()) {
-            val emptyTv = TextView(this).apply {
-                text = "> No bindings. Long-press any app below to bind (Max 6)."
-                setTextColor(COLOR_MUTED)
+        val favs = allApps.filter { favoritePackages.contains(it.packageName) }.take(6)
+        if (favs.isEmpty()) {
+            val hint = TextView(this).apply {
+                text = "> Touch rail to open Apps. Long-press to bind to Circle."
+                setTextColor(TEXT_MUTED)
                 textSize = 13f
                 setPadding(0, 8, 0, 8)
             }
-            favoritesContainer.addView(emptyTv)
+            favoritesContainer.addView(hint)
             return
         }
-
-        for (app in favApps) {
-            favoritesContainer.addView(createAppRowView(app, isFavoriteSection = true))
+        for (app in favs) {
+            favoritesContainer.addView(createAppRowView(app))
         }
     }
 
@@ -238,257 +542,160 @@ class MainActivity : Activity() {
         foldersContainer.removeAllViews()
         for (folder in folders) {
             val folderBox = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(24, 20, 24, 20)
-                background = GradientDrawable().apply {
-                    setColor(COLOR_SURFACE)
-                    cornerRadius = 16f
-                }
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(28, 20, 28, 20)
+                background = cardDrawable(SURFACE_CARD, 16f)
                 val lp = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { setMargins(0, 8, 0, 8) }
+                )
+                lp.setMargins(0, 6, 0, 6)
                 layoutParams = lp
             }
 
-            val titleView = TextView(this).apply {
-                text = "${folder.glyph}  ${folder.name} (${folder.packages.size})"
-                setTextColor(COLOR_TEXT)
+            val icon = TextView(this).apply {
+                text = folder.glyph
+                textSize = 18f
+                setTextColor(ACCENT_JADE)
+                setPadding(0, 0, 24, 0)
+            }
+            val title = TextView(this).apply {
+                text = "${folder.name} (${folder.packages.size})"
+                setTextColor(TEXT_PRIMARY)
                 textSize = 15f
                 typeface = Typeface.DEFAULT_BOLD
             }
-            folderBox.addView(titleView)
+            folderBox.addView(icon)
+            folderBox.addView(title)
 
             folderBox.setOnClickListener {
+                haptic()
                 showFolderDialog(folder)
             }
-
             foldersContainer.addView(folderBox)
         }
     }
 
-    private fun renderAllApps() {
-        appContainer.removeAllViews()
-        for (app in allApps) {
-            appContainer.addView(createAppRowView(app, isFavoriteSection = false))
-        }
-    }
-
-    private fun createAppRowView(app: AppItem, isFavoriteSection: Boolean): View {
+    private fun createAppRowView(app: AppItem): View {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 24, 0, 24) // Extra tap surface for motor precision
+            setPadding(0, 20, 0, 20)
             isClickable = true
             isFocusable = true
         }
 
-        val iconView = ImageView(this).apply {
+        val icon = ImageView(this).apply {
             setImageDrawable(app.icon)
-            val iconSize = 96
-            layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply {
-                setMargins(0, 0, 32, 0)
-            }
+            val size = 96
+            layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, 28, 0) }
         }
-        row.addView(iconView)
+        row.addView(icon)
 
-        val nameView = TextView(this).apply {
+        val name = TextView(this).apply {
             text = app.name
-            setTextColor(COLOR_TEXT)
-            textSize = 16f
-            letterSpacing = 0.05f
+            setTextColor(TEXT_PRIMARY)
+            textSize = 15f
+            letterSpacing = 0.04f
             typeface = Typeface.DEFAULT_BOLD
         }
-        row.addView(nameView)
+        row.addView(name)
 
         row.setOnClickListener {
+            haptic()
             launchApp(app.packageName)
         }
-
         row.setOnLongClickListener {
+            haptic()
             showAppOptions(app)
             true
         }
-
         return row
     }
 
     private fun showAppOptions(app: AppItem) {
         val isFav = favoritePackages.contains(app.packageName)
         val favLabel = if (isFav) "Remove from Inner Circle" else "Bind to Inner Circle (Max 6)"
+        val opts = arrayOf(favLabel, "Assign to Archive/Tome")
 
-        val options = mutableListOf(favLabel, "Add to Tome/Folder")
-        val builder = AlertDialog.Builder(this)
-        builder.setTitle("Ritual: ${app.name}")
-        builder.setItems(options.toTypedArray()) { _, which ->
-            when (which) {
-                0 -> {
-                    if (isFav) {
-                        favoritePackages.remove(app.packageName)
-                    } else {
-                        if (favoritePackages.size < 6) {
-                            favoritePackages.add(app.packageName)
-                        } else {
-                            Toast.makeText(this, "The Circle is full (Max 6)", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    saveUserData()
-                    renderFavorites()
-                }
-                1 -> showAddToFolderDialog(app)
-            }
-        }
-        builder.show()
-    }
-
-    private fun showAddToFolderDialog(app: AppItem) {
-        val folderNames = folders.map { "${it.glyph} ${it.name}" }.toTypedArray()
         AlertDialog.Builder(this)
-            .setTitle("Assign to Archive")
-            .setItems(folderNames) { _, which ->
-                val target = folders[which]
-                if (!target.packages.contains(app.packageName)) {
-                    target.packages.add(app.packageName)
-                    saveUserData()
-                    renderFolders()
-                    Toast.makeText(this, "Bound to ${target.name}", Toast.LENGTH_SHORT).show()
+            .setTitle(app.name)
+            .setItems(opts) { _, which ->
+                when (which) {
+                    0 -> {
+                        if (isFav) favoritePackages.remove(app.packageName)
+                        else if (favoritePackages.size < 6) favoritePackages.add(app.packageName)
+                        else Toast.makeText(this, "Circle is full (Max 6)", Toast.LENGTH_SHORT).show()
+                        saveData()
+                        renderFavorites()
+                    }
+                    1 -> {
+                        val names = folders.map { "${it.glyph} ${it.name}" }.toTypedArray()
+                        AlertDialog.Builder(this)
+                            .setTitle("Select Archive")
+                            .setItems(names) { _, fIndex ->
+                                val f = folders[fIndex]
+                                if (!f.packages.contains(app.packageName)) {
+                                    f.packages.add(app.packageName)
+                                    saveData()
+                                    renderFolders()
+                                }
+                            }.show()
+                    }
                 }
-            }
-            .show()
+            }.show()
     }
 
     private fun showFolderDialog(folder: FolderItem) {
-        val folderApps = allApps.filter { folder.packages.contains(it.packageName) }
-        val names = folderApps.map { it.name }.toTypedArray()
-
-        val builder = AlertDialog.Builder(this)
-        builder.setTitle("${folder.glyph} ${folder.name}")
-        if (names.isEmpty()) {
-            builder.setMessage("This Tome is empty. Long press apps to seal them here.")
-        } else {
-            builder.setItems(names) { _, which ->
-                launchApp(folderApps[which].packageName)
+        val apps = allApps.filter { folder.packages.contains(it.packageName) }
+        val names = apps.map { it.name }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("${folder.glyph} ${folder.name}")
+            .apply {
+                if (names.isEmpty()) setMessage("Archive is empty. Long-press apps to assign them here.")
+                else setItems(names) { _, w -> launchApp(apps[w].packageName) }
             }
-        }
-        builder.setPositiveButton("Close", null)
-        builder.show()
+            .setPositiveButton("Close", null)
+            .show()
     }
 
-    private fun buildAlphabetScroller(): View {
-        val alphabetLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            layoutParams = FrameLayout.LayoutParams(
-                60,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                Gravity.END
-            )
-            setPadding(0, 100, 16, 100)
-        }
-
-        val chars = ('A'..'Z').toList()
-        for (c in chars) {
-            val charTv = TextView(this).apply {
-                text = c.toString()
-                setTextColor(COLOR_MUTED)
-                textSize = 10f
-                typeface = Typeface.MONOSPACE
-                gravity = Gravity.CENTER
-                setPadding(4, 2, 4, 2)
-                setOnClickListener {
-                    jumpToLetter(c)
-                }
-            }
-            alphabetLayout.addView(charTv)
-        }
-        return alphabetLayout
-    }
-
-    private fun jumpToLetter(letter: Char) {
-        val index = allApps.indexOfFirst { it.name.startsWith(letter, ignoreCase = true) }
-        if (index != -1) {
-            val targetView = appContainer.getChildAt(index)
-            if (targetView != null) {
-                mainScroll.smoothScrollTo(0, targetView.top + appContainer.top)
-            }
-        }
-    }
-
-    private fun launchApp(packageName: String) {
+    private fun launchApp(pkg: String) {
         try {
-            val intent = packageManager.getLaunchIntentForPackage(packageName)
-            if (intent != null) {
-                startActivity(intent)
-            } else {
-                Toast.makeText(this, "Portal closed: Cannot open", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, "Invocation failed", Toast.LENGTH_SHORT).show()
+            val intent = packageManager.getLaunchIntentForPackage(pkg)
+            if (intent != null) startActivity(intent)
+        } catch (_: Exception) {
+            Toast.makeText(this, "Cannot open portal", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun selectWidget() {
-        val appWidgetId = appWidgetHost.allocateAppWidgetId()
-        val pickIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
-            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-        }
-        startActivityForResult(pickIntent, REQUEST_PICK_APPWIDGET)
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (resultCode == RESULT_OK) {
-            when (requestCode) {
-                REQUEST_PICK_APPWIDGET -> {
-                    val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
-                    if (appWidgetId != -1) configureWidget(appWidgetId)
-                }
-                REQUEST_CREATE_APPWIDGET -> {
-                    val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
-                    if (appWidgetId != -1) attachWidget(appWidgetId)
-                }
-            }
-        } else if (requestCode == REQUEST_PICK_APPWIDGET && data != null) {
-            val appWidgetId = data.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)
-            if (appWidgetId != -1) appWidgetHost.deleteAppWidgetId(appWidgetId)
+    private fun cardDrawable(color: Int, radius: Float): GradientDrawable {
+        return GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = radius
         }
     }
 
-    private fun configureWidget(appWidgetId: Int) {
-        val appWidgetInfo = appWidgetManager.getAppWidgetInfo(appWidgetId)
-        if (appWidgetInfo.configure != null) {
-            val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
-                component = appWidgetInfo.configure
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-            }
-            startActivityForResult(intent, REQUEST_CREATE_APPWIDGET)
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (drawerLayout.visibility == View.VISIBLE) {
+            hideAppDrawer()
         } else {
-            attachWidget(appWidgetId)
+            // Stay on home screen
         }
-    }
-
-    private fun attachWidget(appWidgetId: Int) {
-        val appWidgetInfo = appWidgetManager.getAppWidgetInfo(appWidgetId)
-        val hostView: AppWidgetHostView = appWidgetHost.createView(this, appWidgetId, appWidgetInfo)
-        hostView.setAppWidget(appWidgetId, appWidgetInfo)
-        widgetContainer.removeAllViews()
-        widgetContainer.addView(hostView)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK) return true
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            onBackPressed()
+            return true
+        }
         return super.onKeyDown(keyCode, event)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        appWidgetHost.stopListening()
     }
 
     private fun loadInstalledApps(): List<AppItem> {
         val list = mutableListOf<AppItem>()
-        val intent = Intent(Intent.ACTION_MAIN, null).apply {
-            addCategory(Intent.CATEGORY_LAUNCHER)
-        }
+        val intent = Intent(Intent.ACTION_MAIN, null).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
         val resolved = packageManager.queryIntentActivities(intent, 0)
         for (info in resolved) {
             val pName = info.activityInfo?.packageName ?: continue
