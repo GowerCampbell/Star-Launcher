@@ -31,3 +31,4 @@ jobs:
         with:
           name: StarLauncher-Debug
           path: app/build/outputs/apk/debug/app-debug.apk
+
