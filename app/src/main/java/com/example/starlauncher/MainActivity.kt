@@ -29,27 +29,26 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.math.abs
 
 class MainActivity : Activity() {
 
     private val gson = Gson()
-    private val PREFS = "StarBeastRelayPrefs"
-    private val KEY_FAVS = "key_inner_circle"
-    private val KEY_FOLDERS = "key_astral_tomes"
-    private val KEY_TASKS = "key_directives"
+    private val PREFS = "WorkstationLauncherPrefs"
+    private val KEY_FAVS = "key_pinned"
+    private val KEY_FOLDERS = "key_folders"
+    private val KEY_TASKS = "key_tasks"
 
-    // --- ELDRITCH CYBERPUNK PALETTE ---
-    private val VOID_BLACK = Color.parseColor("#05070A")        // Deep cosmic charcoal
-    private val SHADOW_SURFACE = Color.parseColor("#0D1219")    // Obsidian card slate
-    private val JADE_PHOSPHOR = Color.parseColor("#10B981")     // Eldritch signal phosphor
-    private val AMBER_EMBER = Color.parseColor("#D97706")       // Dying star ember
-    private val PARCHMENT_HIGH = Color.parseColor("#F1F5F9")    // Dyslexia-safe bone white
-    private val TEXT_ASH = Color.parseColor("#64748B")          // Muted ash gray
-    private val BORDER_SUBTLE = Color.parseColor("#1E293B")     // Thin containment rim
+    // High-readability workstation palette
+    private val COLOR_BG = Color.parseColor("#0A0E14")          // Deep matte charcoal
+    private val COLOR_SURFACE = Color.parseColor("#121820")     // Structured card surface
+    private val COLOR_ACCENT = Color.parseColor("#10B981")      // Focused jade green
+    private val COLOR_SECONDARY = Color.parseColor("#38BDF8")   // Steel cyan
+    private val COLOR_TEXT = Color.parseColor("#E2E8F0")        // Dyslexia-safe bone white
+    private val COLOR_MUTED = Color.parseColor("#64748B")       // Balanced slate gray
+    private val COLOR_BORDER = Color.parseColor("#1E293B")      // Card rim definition
 
     data class AppItem(val name: String, val packageName: String, val icon: Drawable?)
-    data class FolderItem(val name: String, val glyph: String, val packages: MutableList<String>)
+    data class FolderItem(val name: String, val packages: MutableList<String>)
     data class TaskItem(val id: Long, val text: String, var isDone: Boolean)
 
     private var allApps: List<AppItem> = emptyList()
@@ -57,20 +56,23 @@ class MainActivity : Activity() {
     private var folders = mutableListOf<FolderItem>()
     private var taskList = mutableListOf<TaskItem>()
 
+    private lateinit var rootLayout: FrameLayout
     private lateinit var homeStationLayout: LinearLayout
     private lateinit var drawerLayout: FrameLayout
     private lateinit var drawerScroll: ScrollView
     private lateinit var drawerAppContainer: LinearLayout
-    private lateinit var drawerSectorTv: TextView
+    private lateinit var drawerTitleTv: TextView
     private lateinit var favoritesContainer: LinearLayout
     private lateinit var foldersContainer: LinearLayout
     private lateinit var tasksContainer: LinearLayout
 
-    private lateinit var beaconTimeTv: TextView
-    private lateinit var beaconDateTv: TextView
+    private lateinit var timeTv: TextView
+    private lateinit var dateTv: TextView
 
+    // Ergonomic Alphabet Rail
     private lateinit var railContainer: LinearLayout
-    private val alphabet = listOf('★') + ('A'..'Z').toList()
+    private lateinit var floatingBadge: TextView
+    private val alphabet = listOf('•') + ('A'..'Z').toList()
     private val railViews = mutableListOf<TextView>()
     private var lastHoverIndex = -1
 
@@ -94,7 +96,7 @@ class MainActivity : Activity() {
         }
 
         loadUserData()
-        buildAstralInterface()
+        buildInterface()
     }
 
     override fun onResume() {
@@ -113,9 +115,9 @@ class MainActivity : Activity() {
 
     private fun updateClock() {
         val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-        val dateFormat = SimpleDateFormat("EEEE // dd.MM.yyyy", Locale.getDefault())
-        if (::beaconTimeTv.isInitialized) beaconTimeTv.text = timeFormat.format(Date())
-        if (::beaconDateTv.isInitialized) beaconDateTv.text = "☄ ASTRAL CYCLE: ${dateFormat.format(Date()).uppercase()}"
+        val dateFormat = SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault())
+        if (::timeTv.isInitialized) timeTv.text = timeFormat.format(Date())
+        if (::dateTv.isInitialized) dateTv.text = dateFormat.format(Date()).uppercase()
     }
 
     private fun pulseHaptic() {
@@ -124,7 +126,7 @@ class MainActivity : Activity() {
                 vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
             } else {
                 @Suppress("DEPRECATION")
-                vibrator?.vibrate(15)
+                vibrator?.vibrate(12)
             }
         } catch (_: Exception) {}
     }
@@ -140,17 +142,17 @@ class MainActivity : Activity() {
             gson.fromJson(folderJson, object : TypeToken<MutableList<FolderItem>>() {}.type)
         } else {
             mutableListOf(
-                FolderItem("Codex & Reading", "🕮", mutableListOf()),
-                FolderItem("Occult Dev Terminal", "⚙", mutableListOf()),
-                FolderItem("Star Beast Comms", "⛯", mutableListOf())
+                FolderItem("Writing & Notes", mutableListOf()),
+                FolderItem("Dev & Tools", mutableListOf()),
+                FolderItem("Reading & Media", mutableListOf())
             )
         }
         taskList = if (taskJson != null) {
             gson.fromJson(taskJson, object : TypeToken<MutableList<TaskItem>>() {}.type)
         } else {
             mutableListOf(
-                TaskItem(1, "Commune with Star Relays", false),
-                TaskItem(2, "Catalogue Elder Artifacts", false)
+                TaskItem(1, "Worldbuilding notes outline", false),
+                TaskItem(2, "Review codebase changes", false)
             )
         }
     }
@@ -163,16 +165,16 @@ class MainActivity : Activity() {
             .apply()
     }
 
-    private fun buildAstralInterface() {
-        val root = FrameLayout(this).apply {
-            setBackgroundColor(VOID_BLACK)
+    private fun buildInterface() {
+        rootLayout = FrameLayout(this).apply {
+            setBackgroundColor(COLOR_BG)
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
         }
 
-        // ================= HOME SANCTUARY =================
+        // ================= HOME DASHBOARD =================
         val stationScroll = ScrollView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -186,37 +188,37 @@ class MainActivity : Activity() {
             setPadding(48, 72, 96, 120)
         }
 
-        // 1. BEACON GLANCE
-        homeStationLayout.addView(createBeaconHeader())
+        // 1. Clock & Date Display
+        homeStationLayout.addView(createClockWidget())
 
-        // 2. ASTRAL AUDIO DECK (Spotify / Media)
-        homeStationLayout.addView(createAudioRelay())
+        // 2. Audio Control Deck
+        homeStationLayout.addView(createMediaWidget())
 
-        // 3. TASK GRIMOIRE
-        homeStationLayout.addView(createDirectiveDesk())
+        // 3. Quick Tasks / Directives
+        homeStationLayout.addView(createTaskWidget())
 
-        // 4. INNER CIRCLE (FAVORITES)
-        val favHeader = TextView(this).apply {
-            text = "★ THE INNER CIRCLE [RESONANT BEACONS]"
-            setTextColor(AMBER_EMBER)
-            textSize = 11f
-            letterSpacing = 0.18f
+        // 4. Pinned Applications (Max 6)
+        val pinnedHeader = TextView(this).apply {
+            text = "PINNED"
+            setTextColor(COLOR_SECONDARY)
+            textSize = 12f
+            letterSpacing = 0.15f
             typeface = Typeface.MONOSPACE
-            setPadding(0, 36, 0, 16)
+            setPadding(0, 32, 0, 16)
         }
-        homeStationLayout.addView(favHeader)
+        homeStationLayout.addView(pinnedHeader)
 
         favoritesContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         homeStationLayout.addView(favoritesContainer)
 
-        // 5. TOMES OF THE ARCHIVE
+        // 5. Folders / Workspaces
         val folderHeader = TextView(this).apply {
-            text = "🜏 FORBIDDEN ARCHIVES [TOMES]"
-            setTextColor(JADE_PHOSPHOR)
-            textSize = 11f
-            letterSpacing = 0.18f
+            text = "FOLDERS"
+            setTextColor(COLOR_ACCENT)
+            textSize = 12f
+            letterSpacing = 0.15f
             typeface = Typeface.MONOSPACE
-            setPadding(0, 36, 0, 16)
+            setPadding(0, 32, 0, 16)
         }
         homeStationLayout.addView(folderHeader)
 
@@ -224,11 +226,11 @@ class MainActivity : Activity() {
         homeStationLayout.addView(foldersContainer)
 
         stationScroll.addView(homeStationLayout)
-        root.addView(stationScroll)
+        rootLayout.addView(stationScroll)
 
-        // ================= APP DRAWER OVERLAY =================
+        // ================= APP DRAWER (OVERLAY) =================
         drawerLayout = FrameLayout(this).apply {
-            setBackgroundColor(VOID_BLACK)
+            setBackgroundColor(COLOR_BG)
             visibility = View.GONE
             alpha = 0f
             setPadding(48, 72, 96, 96)
@@ -246,15 +248,15 @@ class MainActivity : Activity() {
             )
         }
 
-        drawerSectorTv = TextView(this).apply {
-            text = "SECTOR // CONSTELLATION"
-            setTextColor(JADE_PHOSPHOR)
-            textSize = 18f
-            letterSpacing = 0.15f
+        drawerTitleTv = TextView(this).apply {
+            text = "APPLICATIONS"
+            setTextColor(COLOR_ACCENT)
+            textSize = 16f
+            letterSpacing = 0.12f
             typeface = Typeface.MONOSPACE
-            setPadding(0, 0, 0, 24)
+            setPadding(0, 0, 0, 20)
         }
-        drawerContent.addView(drawerSectorTv)
+        drawerContent.addView(drawerTitleTv)
 
         drawerScroll = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
@@ -268,61 +270,76 @@ class MainActivity : Activity() {
         drawerContent.addView(drawerScroll)
 
         drawerLayout.addView(drawerContent)
-        root.addView(drawerLayout)
+        rootLayout.addView(drawerLayout)
 
-        // ================= FLUID FISHEYE RAIL =================
-        val waveRail = buildFisheyeAlphabetRail()
-        root.addView(waveRail)
+        // ================= FLOATING LETTER MAGNIFIER BADGE =================
+        floatingBadge = TextView(this).apply {
+            visibility = View.GONE
+            setTextColor(COLOR_TEXT)
+            textSize = 28f
+            typeface = Typeface.MONOSPACE
+            gravity = Gravity.CENTER
+            background = createCardDrawable(COLOR_SURFACE, 28f, COLOR_ACCENT)
+            layoutParams = FrameLayout.LayoutParams(130, 130, Gravity.END or Gravity.TOP).apply {
+                marginEnd = 110
+            }
+            elevation = 16f
+        }
+        rootLayout.addView(floatingBadge)
 
-        setContentView(root)
+        // ================= ALPHABET SCROLL RAIL =================
+        val alphabetRail = buildAlphabetRail()
+        rootLayout.addView(alphabetRail)
+
+        setContentView(rootLayout)
         refreshAll()
     }
 
-    private fun createBeaconHeader(): View {
+    private fun createClockWidget(): View {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(32, 28, 32, 28)
-            background = createShadowTile(SHADOW_SURFACE, 20f)
+            background = createCardDrawable(COLOR_SURFACE, 18f, COLOR_BORDER)
             val lp = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
-            lp.setMargins(0, 0, 0, 24)
+            lp.setMargins(0, 0, 0, 20)
             layoutParams = lp
         }
 
-        beaconTimeTv = TextView(this).apply {
-            setTextColor(PARCHMENT_HIGH)
-            textSize = 38f
-            letterSpacing = 0.05f
+        timeTv = TextView(this).apply {
+            setTextColor(COLOR_TEXT)
+            textSize = 36f
+            letterSpacing = 0.04f
             typeface = Typeface.MONOSPACE
         }
 
-        beaconDateTv = TextView(this).apply {
-            setTextColor(JADE_PHOSPHOR)
-            textSize = 11f
-            letterSpacing = 0.15f
+        dateTv = TextView(this).apply {
+            setTextColor(COLOR_ACCENT)
+            textSize = 12f
+            letterSpacing = 0.1f
             typeface = Typeface.DEFAULT_BOLD
             setPadding(0, 4, 0, 0)
         }
 
-        card.addView(beaconTimeTv)
-        card.addView(beaconDateTv)
+        card.addView(timeTv)
+        card.addView(dateTv)
         updateClock()
         return card
     }
 
-    private fun createAudioRelay(): View {
-        val capsule = LinearLayout(this).apply {
+    private fun createMediaWidget(): View {
+        val card = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(28, 20, 28, 20)
-            background = createShadowTile(SHADOW_SURFACE, 20f)
+            background = createCardDrawable(COLOR_SURFACE, 18f, COLOR_BORDER)
             val lp = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
-            lp.setMargins(0, 0, 0, 24)
+            lp.setMargins(0, 0, 0, 20)
             layoutParams = lp
         }
 
@@ -332,26 +349,25 @@ class MainActivity : Activity() {
         }
 
         val title = TextView(this).apply {
-            text = "⛯ STAR BEAST RESONATOR"
-            setTextColor(AMBER_EMBER)
-            textSize = 10f
-            letterSpacing = 0.12f
+            text = "AUDIO"
+            setTextColor(COLOR_SECONDARY)
+            textSize = 11f
+            letterSpacing = 0.1f
             typeface = Typeface.MONOSPACE
         }
         val sub = TextView(this).apply {
-            text = "Tap to invoke Spotify Portal"
-            setTextColor(TEXT_ASH)
-            textSize = 12f
-            typeface = Typeface.DEFAULT_BOLD
+            text = "Open Spotify"
+            setTextColor(COLOR_MUTED)
+            textSize = 13f
         }
         labelLayout.addView(title)
         labelLayout.addView(sub)
-        capsule.addView(labelLayout)
+        card.addView(labelLayout)
 
         val playBtn = TextView(this).apply {
             text = "▶  ⏸"
-            setTextColor(PARCHMENT_HIGH)
-            textSize = 16f
+            setTextColor(COLOR_TEXT)
+            textSize = 15f
             setPadding(24, 16, 24, 16)
             setOnClickListener {
                 pulseHaptic()
@@ -362,28 +378,28 @@ class MainActivity : Activity() {
                 am.dispatchMediaKeyEvent(up)
             }
         }
-        capsule.addView(playBtn)
+        card.addView(playBtn)
 
-        capsule.setOnClickListener {
+        card.setOnClickListener {
             pulseHaptic()
             val spotifyIntent = packageManager.getLaunchIntentForPackage("com.spotify.music")
             if (spotifyIntent != null) startActivity(spotifyIntent)
-            else Toast.makeText(this, "Relay unreachable: Spotify missing", Toast.LENGTH_SHORT).show()
+            else Toast.makeText(this, "Spotify not installed", Toast.LENGTH_SHORT).show()
         }
 
-        return capsule
+        return card
     }
 
-    private fun createDirectiveDesk(): View {
+    private fun createTaskWidget(): View {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(28, 24, 28, 24)
-            background = createShadowTile(SHADOW_SURFACE, 20f)
+            background = createCardDrawable(COLOR_SURFACE, 18f, COLOR_BORDER)
             val lp = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
-            lp.setMargins(0, 0, 0, 24)
+            lp.setMargins(0, 0, 0, 20)
             layoutParams = lp
         }
 
@@ -393,20 +409,20 @@ class MainActivity : Activity() {
         }
 
         val title = TextView(this).apply {
-            text = "🜂 CODEX DIRECTIVES"
-            setTextColor(JADE_PHOSPHOR)
+            text = "DIRECTIVES"
+            setTextColor(COLOR_ACCENT)
             textSize = 11f
-            letterSpacing = 0.12f
+            letterSpacing = 0.1f
             typeface = Typeface.MONOSPACE
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
         val addBtn = TextView(this).apply {
-            text = "[ + ENGRAVE ]"
-            setTextColor(AMBER_EMBER)
+            text = "+ ADD"
+            setTextColor(COLOR_SECONDARY)
             textSize = 11f
             typeface = Typeface.MONOSPACE
             setPadding(16, 8, 16, 8)
-            setOnClickListener { showAddDirectiveDialog() }
+            setOnClickListener { showAddTaskDialog() }
         }
         topRow.addView(title)
         topRow.addView(addBtn)
@@ -414,89 +430,88 @@ class MainActivity : Activity() {
 
         tasksContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, 16, 0, 0)
+            setPadding(0, 14, 0, 0)
         }
         card.addView(tasksContainer)
         return card
     }
 
-    private fun renderDirectives() {
+    private fun renderTasks() {
         tasksContainer.removeAllViews()
         for (task in taskList) {
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, 12, 0, 12)
+                setPadding(0, 10, 0, 10)
             }
-            val glyph = TextView(this).apply {
-                text = if (task.isDone) "🜏" else "☿"
-                setTextColor(if (task.isDone) JADE_PHOSPHOR else TEXT_ASH)
-                textSize = 15f
-                setPadding(0, 0, 20, 0)
+            val check = TextView(this).apply {
+                text = if (task.isDone) "■" else "□"
+                setTextColor(if (task.isDone) COLOR_ACCENT else COLOR_MUTED)
+                textSize = 14f
+                setPadding(0, 0, 18, 0)
             }
             val tv = TextView(this).apply {
                 text = task.text
-                setTextColor(if (task.isDone) TEXT_ASH else PARCHMENT_HIGH)
+                setTextColor(if (task.isDone) COLOR_MUTED else COLOR_TEXT)
                 textSize = 14f
-                typeface = Typeface.DEFAULT_BOLD
                 if (task.isDone) paintFlags = paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
             }
-            row.addView(glyph)
+            row.addView(check)
             row.addView(tv)
 
             row.setOnClickListener {
                 pulseHaptic()
                 task.isDone = !task.isDone
                 saveUserData()
-                renderDirectives()
+                renderTasks()
             }
             row.setOnLongClickListener {
                 pulseHaptic()
                 taskList.remove(task)
                 saveUserData()
-                renderDirectives()
+                renderTasks()
                 true
             }
             tasksContainer.addView(row)
         }
     }
 
-    private fun showAddDirectiveDialog() {
+    private fun showAddTaskDialog() {
         val input = EditText(this).apply {
-            hint = "Inscribe directive into codex..."
-            setTextColor(PARCHMENT_HIGH)
-            setHintTextColor(TEXT_ASH)
+            hint = "New item..."
+            setTextColor(COLOR_TEXT)
+            setHintTextColor(COLOR_MUTED)
         }
         AlertDialog.Builder(this)
-            .setTitle("Engrave Directive")
+            .setTitle("Add Directive")
             .setView(input)
-            .setPositiveButton("Seal") { _, _ ->
+            .setPositiveButton("Save") { _, _ ->
                 val txt = input.text.toString().trim()
                 if (txt.isNotEmpty()) {
                     taskList.add(TaskItem(System.currentTimeMillis(), txt, false))
                     saveUserData()
-                    renderDirectives()
+                    renderTasks()
                 }
             }
-            .setNegativeButton("Abort", null)
+            .setNegativeButton("Cancel", null)
             .show()
     }
 
-    // ================= DYNAMIC WAVE / FISHEYE RAIL =================
+    // ================= ALPHABET RAIL + FLOATING BADGE =================
     @SuppressLint("ClickableViewAccessibility")
-    private fun buildFisheyeAlphabetRail(): View {
+    private fun buildAlphabetRail(): View {
         railContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            layoutParams = FrameLayout.LayoutParams(80, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END)
-            setPadding(0, 56, 8, 56)
+            layoutParams = FrameLayout.LayoutParams(64, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END)
+            setPadding(0, 56, 12, 56)
         }
 
         railViews.clear()
         for (c in alphabet) {
             val tv = TextView(this).apply {
                 text = c.toString()
-                setTextColor(TEXT_ASH)
+                setTextColor(COLOR_MUTED)
                 textSize = 10f
                 typeface = Typeface.MONOSPACE
                 gravity = Gravity.CENTER
@@ -513,19 +528,40 @@ class MainActivity : Activity() {
                     val normalized = y / railContainer.height
                     val targetIdx = (normalized * alphabet.size).toInt().coerceIn(0, alphabet.size - 1)
 
-                    applyFisheyeTransformation(targetIdx)
+                    // Position the floating badge vertically centered on touch
+                    floatingBadge.visibility = View.VISIBLE
+                    val badgeY = (event.rawY - 180).coerceIn(120f, (rootLayout.height - 240).toFloat())
+                    floatingBadge.y = badgeY
+
+                    val selectedChar = alphabet[targetIdx]
+                    floatingBadge.text = selectedChar.toString()
+
+                    // Highlight rail element cleanly without enlarging its frame
+                    for (i in railViews.indices) {
+                        if (i == targetIdx) {
+                            railViews[i].setTextColor(COLOR_ACCENT)
+                            railViews[i].setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
+                        } else {
+                            railViews[i].setTextColor(COLOR_MUTED)
+                            railViews[i].setTypeface(Typeface.MONOSPACE, Typeface.NORMAL)
+                        }
+                    }
 
                     if (targetIdx != lastHoverIndex) {
                         lastHoverIndex = targetIdx
                         pulseHaptic()
-                        val selectedChar = alphabet[targetIdx]
-                        if (selectedChar == '★') hideAppDrawer()
+                        if (selectedChar == '•') hideAppDrawer()
                         else showAppDrawer(selectedChar)
                     }
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    resetFisheyeRail()
+                    floatingBadge.visibility = View.GONE
+                    for (v in railViews) {
+                        v.setTextColor(COLOR_MUTED)
+                        v.setTypeface(Typeface.MONOSPACE, Typeface.NORMAL)
+                    }
+                    lastHoverIndex = -1
                     true
                 }
                 else -> true
@@ -534,55 +570,17 @@ class MainActivity : Activity() {
         return railContainer
     }
 
-    private fun applyFisheyeTransformation(centerIndex: Int) {
-        for (i in railViews.indices) {
-            val view = railViews[i]
-            val distance = abs(i - centerIndex)
-            when (distance) {
-                0 -> {
-                    view.textSize = 22f
-                    view.setTextColor(JADE_PHOSPHOR)
-                    view.translationX = -32f
-                }
-                1 -> {
-                    view.textSize = 15f
-                    view.setTextColor(AMBER_EMBER)
-                    view.translationX = -18f
-                }
-                2 -> {
-                    view.textSize = 12f
-                    view.setTextColor(PARCHMENT_HIGH)
-                    view.translationX = -8f
-                }
-                else -> {
-                    view.textSize = 9f
-                    view.setTextColor(TEXT_ASH)
-                    view.translationX = 0f
-                }
-            }
-        }
-    }
-
-    private fun resetFisheyeRail() {
-        for (view in railViews) {
-            view.textSize = 10f
-            view.setTextColor(TEXT_ASH)
-            view.translationX = 0f
-        }
-        lastHoverIndex = -1
-    }
-
     private fun showAppDrawer(filterChar: Char? = null) {
         if (drawerLayout.visibility != View.VISIBLE) {
             drawerLayout.visibility = View.VISIBLE
-            drawerLayout.animate().alpha(1f).setDuration(160).setInterpolator(DecelerateInterpolator()).start()
+            drawerLayout.animate().alpha(1f).setDuration(140).setInterpolator(DecelerateInterpolator()).start()
         }
         filterAndRenderDrawer(filterChar)
     }
 
     private fun hideAppDrawer() {
         if (drawerLayout.visibility == View.VISIBLE) {
-            drawerLayout.animate().alpha(0f).setDuration(130).withEndAction {
+            drawerLayout.animate().alpha(0f).setDuration(120).withEndAction {
                 drawerLayout.visibility = View.GONE
             }.start()
         }
@@ -592,15 +590,15 @@ class MainActivity : Activity() {
         drawerAppContainer.removeAllViews()
         val filtered = if (filterChar == null) allApps else allApps.filter { it.name.startsWith(filterChar, ignoreCase = true) }
 
-        drawerSectorTv.text = if (filterChar != null) "CONSTELLATION // SECTOR $filterChar" else "ALL SANCTIONED TRANSMISSIONS"
+        drawerTitleTv.text = if (filterChar != null) "APPLICATIONS [$filterChar]" else "APPLICATIONS"
 
         if (filtered.isEmpty()) {
             val emptyTv = TextView(this).apply {
-                text = "No astral signatures detected in sector '$filterChar'"
-                setTextColor(TEXT_ASH)
+                text = "No apps starting with '$filterChar'"
+                setTextColor(COLOR_MUTED)
                 textSize = 13f
                 typeface = Typeface.MONOSPACE
-                setPadding(0, 32, 0, 0)
+                setPadding(0, 24, 0, 0)
             }
             drawerAppContainer.addView(emptyTv)
             return
@@ -630,7 +628,7 @@ class MainActivity : Activity() {
         sanitizeSavedData()
         renderFavorites()
         renderFolders()
-        renderDirectives()
+        renderTasks()
     }
 
     private fun renderFavorites() {
@@ -638,10 +636,10 @@ class MainActivity : Activity() {
         val favs = allApps.filter { favoritePackages.contains(it.packageName) }.take(6)
         if (favs.isEmpty()) {
             val hint = TextView(this).apply {
-                text = "> Glide along the star rail to manifest apps. Long press to bind to the Inner Circle."
-                setTextColor(TEXT_ASH)
+                text = "> Touch rail to browse apps. Long-press to pin up to 6."
+                setTextColor(COLOR_MUTED)
                 textSize = 13f
-                setPadding(0, 8, 0, 8)
+                setPadding(0, 6, 0, 6)
             }
             favoritesContainer.addView(hint)
             return
@@ -657,27 +655,25 @@ class MainActivity : Activity() {
             val folderBox = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(28, 20, 28, 20)
-                background = createShadowTile(SHADOW_SURFACE, 16f)
+                setPadding(24, 18, 24, 18)
+                background = createCardDrawable(COLOR_SURFACE, 14f, COLOR_BORDER)
                 val lp = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 )
-                lp.setMargins(0, 8, 0, 8)
+                lp.setMargins(0, 6, 0, 6)
                 layoutParams = lp
             }
 
             val icon = TextView(this).apply {
-                text = folder.glyph
-                textSize = 19f
-                setTextColor(JADE_PHOSPHOR)
-                setPadding(0, 0, 24, 0)
+                text = "📁"
+                textSize = 16f
+                setPadding(0, 0, 20, 0)
             }
             val title = TextView(this).apply {
-                text = "${folder.name} [${folder.packages.size}]"
-                setTextColor(PARCHMENT_HIGH)
-                textSize = 15f
-                letterSpacing = 0.05f
+                text = "${folder.name} (${folder.packages.size})"
+                setTextColor(COLOR_TEXT)
+                textSize = 14f
                 typeface = Typeface.DEFAULT_BOLD
             }
             folderBox.addView(icon)
@@ -695,23 +691,23 @@ class MainActivity : Activity() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 22, 0, 22)
+            setPadding(0, 18, 0, 18)
             isClickable = true
             isFocusable = true
         }
 
         val icon = ImageView(this).apply {
             setImageDrawable(app.icon)
-            val size = 96
-            layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, 28, 0) }
+            val size = 92
+            layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, 24, 0) }
         }
         row.addView(icon)
 
         val name = TextView(this).apply {
             text = app.name
-            setTextColor(PARCHMENT_HIGH)
+            setTextColor(COLOR_TEXT)
             textSize = 15f
-            letterSpacing = 0.04f
+            letterSpacing = 0.03f
             typeface = Typeface.DEFAULT_BOLD
         }
         row.addView(name)
@@ -730,8 +726,8 @@ class MainActivity : Activity() {
 
     private fun showAppOptions(app: AppItem) {
         val isFav = favoritePackages.contains(app.packageName)
-        val favLabel = if (isFav) "Sever from Inner Circle" else "Bind to Inner Circle (Max 6)"
-        val opts = arrayOf(favLabel, "Assign to Codex Archive")
+        val favLabel = if (isFav) "Unpin from top" else "Pin to top (Max 6)"
+        val opts = arrayOf(favLabel, "Add to Folder")
 
         AlertDialog.Builder(this)
             .setTitle(app.name)
@@ -740,14 +736,14 @@ class MainActivity : Activity() {
                     0 -> {
                         if (isFav) favoritePackages.remove(app.packageName)
                         else if (favoritePackages.size < 6) favoritePackages.add(app.packageName)
-                        else Toast.makeText(this, "The Inner Circle is full (Max 6)", Toast.LENGTH_SHORT).show()
+                        else Toast.makeText(this, "Pinned list full (Max 6)", Toast.LENGTH_SHORT).show()
                         saveUserData()
                         renderFavorites()
                     }
                     1 -> {
-                        val names = folders.map { "${it.glyph} ${it.name}" }.toTypedArray()
+                        val names = folders.map { it.name }.toTypedArray()
                         AlertDialog.Builder(this)
-                            .setTitle("Select Archive Tome")
+                            .setTitle("Select Folder")
                             .setItems(names) { _, fIndex ->
                                 val f = folders[fIndex]
                                 if (!f.packages.contains(app.packageName)) {
@@ -765,9 +761,9 @@ class MainActivity : Activity() {
         val apps = allApps.filter { folder.packages.contains(it.packageName) }
         val names = apps.map { it.name }.toTypedArray()
         AlertDialog.Builder(this)
-            .setTitle("${folder.glyph} ${folder.name}")
+            .setTitle(folder.name)
             .apply {
-                if (names.isEmpty()) setMessage("Archive empty. Long-press apps to bind them here.")
+                if (names.isEmpty()) setMessage("Folder is empty. Long-press any app to add it.")
                 else setItems(names) { _, w -> launchApp(apps[w].packageName) }
             }
             .setPositiveButton("Close", null)
@@ -779,15 +775,15 @@ class MainActivity : Activity() {
             val intent = packageManager.getLaunchIntentForPackage(pkg)
             if (intent != null) startActivity(intent)
         } catch (_: Exception) {
-            Toast.makeText(this, "Portal severed: Unable to launch", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Unable to launch", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun createShadowTile(color: Int, radius: Float): GradientDrawable {
+    private fun createCardDrawable(color: Int, radius: Float, strokeColor: Int): GradientDrawable {
         return GradientDrawable().apply {
             setColor(color)
             cornerRadius = radius
-            setStroke(1, BORDER_SUBTLE)
+            setStroke(1, strokeColor)
         }
     }
 
