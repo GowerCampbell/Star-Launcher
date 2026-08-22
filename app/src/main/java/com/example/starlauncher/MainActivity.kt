@@ -37,15 +37,15 @@ class MainActivity : Activity() {
 
     private val gson = Gson()
     private val PREFS = "PixelStationGridPrefs"
-    private val KEY_FAVS = "key_pinned_favs_v4"
-    private val KEY_WIDGET_IDS = "key_widget_ids_v4"
-    private val KEY_FOLDERS = "key_shelves_v4"
+    private val KEY_FAVS = "key_pinned_favs_v5"
+    private val KEY_WIDGET_IDS = "key_widget_ids_v5"
+    private val KEY_FOLDERS = "key_shelves_v5"
 
     private val APPWIDGET_HOST_ID = 2048
     private val REQUEST_PICK_APPWIDGET = 101
     private val REQUEST_CREATE_APPWIDGET = 102
 
-    // --- DARK CANVAS PALETTE ---
+    // Palette
     private val COLOR_TRANSPARENT = Color.TRANSPARENT
     private val COLOR_SCRIM = Color.parseColor("#B3000000")
     private val COLOR_SHELF_BG = Color.parseColor("#28282B")
@@ -69,7 +69,7 @@ class MainActivity : Activity() {
     private lateinit var rootLayout: FrameLayout
     private lateinit var viewPager: ViewPager2
     private lateinit var pageIndicatorTv: TextView
-    private lateinit var widgetContainer: LinearLayout
+    private var widgetContainer: LinearLayout? = null
     private var favoritesGridLayout: GridLayout? = null
     private var shelvesContainer: LinearLayout? = null
 
@@ -114,12 +114,16 @@ class MainActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
-        appWidgetHost.startListening()
+        try {
+            appWidgetHost.startListening()
+        } catch (_: Exception) {}
     }
 
     override fun onStop() {
         super.onStop()
-        appWidgetHost.stopListening()
+        try {
+            appWidgetHost.stopListening()
+        } catch (_: Exception) {}
     }
 
     override fun onResume() {
@@ -217,7 +221,7 @@ class MainActivity : Activity() {
         }
         rootLayout.addView(pageIndicatorTv)
 
-        // ================= APP DRAWER OVERLAY =================
+        // Drawer Overlay Window
         drawerScrimLayer = FrameLayout(this).apply {
             setBackgroundColor(COLOR_SCRIM)
             visibility = View.GONE
@@ -278,7 +282,7 @@ class MainActivity : Activity() {
         drawerScrimLayer.addView(drawerWindowSheet)
         rootLayout.addView(drawerScrimLayer)
 
-        // ================= FLOATING MAGNIFIER =================
+        // Floating Magnifier
         floatingBadge = TextView(this).apply {
             visibility = View.GONE
             setTextColor(COLOR_WHITE)
@@ -293,7 +297,7 @@ class MainActivity : Activity() {
         }
         rootLayout.addView(floatingBadge)
 
-        // ================= ENLARGED BOTTOM-ANCHORED ALPHABET RAIL =================
+        // Bottom-anchored Alphabet Rail
         val alphabetRail = buildAlphabetRail()
         rootLayout.addView(alphabetRail)
 
@@ -302,7 +306,6 @@ class MainActivity : Activity() {
         refreshAll()
     }
 
-    // ================= PAGE 1: PRIMARY CANVAS =================
     private fun buildPageOneMain(): View {
         val scroll = ScrollView(this).apply {
             layoutParams = ViewGroup.LayoutParams(
@@ -382,7 +385,6 @@ class MainActivity : Activity() {
         return scroll
     }
 
-    // ================= PAGE 2: CATEGORY SHELVES =================
     private fun buildPageTwoShelves(): View {
         val scroll = ScrollView(this).apply {
             layoutParams = ViewGroup.LayoutParams(
@@ -433,7 +435,6 @@ class MainActivity : Activity() {
         return scroll
     }
 
-    // ================= SHELF RENDERING & DIALOGS =================
     private fun renderShelves() {
         val container = shelvesContainer ?: return
         container.removeAllViews()
@@ -541,7 +542,6 @@ class MainActivity : Activity() {
             .show()
     }
 
-    // ================= DYNAMIC WIDGET HOSTING WITH RESIZING =================
     private fun launchWidgetPicker() {
         val appWidgetId = appWidgetHost.allocateAppWidgetId()
         val pickIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
@@ -567,7 +567,9 @@ class MainActivity : Activity() {
         } else if (resultCode == RESULT_CANCELED && data != null) {
             val appWidgetId = data.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
             if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                appWidgetHost.deleteAppWidgetId(appWidgetId)
+                try {
+                    appWidgetHost.deleteAppWidgetId(appWidgetId)
+                } catch (_: Exception) {}
             }
         }
     }
@@ -596,29 +598,25 @@ class MainActivity : Activity() {
             layoutParams = lp
         }
 
-        val displayMetrics = resources.displayMetrics
-        val density = displayMetrics.density
-        val widthDp = (displayMetrics.widthPixels / density).toInt() - 60
-        val heightDp = appWidgetInfo.minHeight.coerceAtLeast(140)
-        hostView.updateAppWidgetSize(null, widthDp, heightDp, widthDp, heightDp)
-
         hostView.setOnLongClickListener {
             pulseHaptic()
             AlertDialog.Builder(this@MainActivity)
                 .setTitle("Remove Widget")
                 .setMessage("Remove this widget from canvas?")
                 .setPositiveButton("Remove") { _, _ ->
-                    appWidgetHost.deleteAppWidgetId(appWidgetId)
+                    try {
+                        appWidgetHost.deleteAppWidgetId(appWidgetId)
+                    } catch (_: Exception) {}
                     savedWidgetIds.remove(appWidgetId)
                     saveUserData()
-                    widgetContainer.removeView(hostView)
+                    widgetContainer?.removeView(hostView)
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
             true
         }
 
-        widgetContainer.addView(hostView)
+        widgetContainer?.addView(hostView)
         if (!savedWidgetIds.contains(appWidgetId)) {
             savedWidgetIds.add(appWidgetId)
             saveUserData()
@@ -626,7 +624,8 @@ class MainActivity : Activity() {
     }
 
     private fun restoreSavedWidgets() {
-        widgetContainer.removeAllViews()
+        val container = widgetContainer ?: return
+        container.removeAllViews()
         val validIds = mutableListOf<Int>()
         for (id in savedWidgetIds) {
             val info = appWidgetManager.getAppWidgetInfo(id)
@@ -634,14 +633,15 @@ class MainActivity : Activity() {
                 attachWidgetView(id)
                 validIds.add(id)
             } else {
-                appWidgetHost.deleteAppWidgetId(id)
+                try {
+                    appWidgetHost.deleteAppWidgetId(id)
+                } catch (_: Exception) {}
             }
         }
         savedWidgetIds = validIds
         saveUserData()
     }
 
-    // ================= APP GRID WITH COLOR ICONS =================
     private fun renderFavoritesGrid() {
         val grid = favoritesGridLayout ?: return
         grid.removeAllViews()
@@ -752,7 +752,6 @@ class MainActivity : Activity() {
         return searchBox
     }
 
-    // ================= ENLARGED BOTTOM-ANCHORED ALPHABET RAIL =================
     @SuppressLint("ClickableViewAccessibility")
     private fun buildAlphabetRail(): View {
         railContainer = LinearLayout(this).apply {
