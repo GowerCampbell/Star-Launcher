@@ -82,6 +82,7 @@ class MainActivity : Activity() {
     private var sleepCountdownTv: TextView? = null
     private var trackTitleTv: TextView? = null
     private var trackArtistTv: TextView? = null
+    private var searchInput: EditText? = null
     private var favoritesGridLayout: GridLayout? = null
     private var foldersRow: LinearLayout? = null
     private var tasksContainer: LinearLayout? = null
@@ -263,7 +264,7 @@ class MainActivity : Activity() {
                 return object : RecyclerView.ViewHolder(view) {}
             }
             override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-                // Binding is maintained dynamically
+                // Layout bindings are updated dynamically via refreshAll
             }
         }
 
@@ -356,7 +357,7 @@ class MainActivity : Activity() {
         val alphabetRail = buildAlphabetRail()
         rootLayout.addView(alphabetRail)
 
-        // Edge-to-edge insets
+        // Window insets to keep status bar clean
         ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { _, insets ->
             val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             pageIndicatorTv.translationY = statusBarHeight.toFloat()
@@ -428,7 +429,6 @@ class MainActivity : Activity() {
             lp.setMargins(0, 0, 0, 18)
             layoutParams = lp
             setOnTouchListener { _, event ->
-                // Disallow ViewPager from intercepting horizontal shelf scroll
                 parent.requestDisallowInterceptTouchEvent(true)
                 false
             }
@@ -935,7 +935,6 @@ class MainActivity : Activity() {
         }
 
         railContainer.setOnTouchListener { _, event ->
-            // Prevent ViewPager2 from intercepting vertical rail scrub
             railContainer.parent.requestDisallowInterceptTouchEvent(true)
             when (event.action) {
                 MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
