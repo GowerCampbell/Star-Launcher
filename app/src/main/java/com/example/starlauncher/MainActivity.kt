@@ -10,8 +10,8 @@ import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.*
-import android.graphics.drawable.BitmapDrawable
+import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
@@ -26,6 +26,8 @@ import android.view.inputmethod.EditorInfo
 import android.widget.*
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.text.SimpleDateFormat
@@ -34,45 +36,51 @@ import java.util.*
 class MainActivity : Activity() {
 
     private val gson = Gson()
-    private val PREFS = "PixelStationWidgetPrefs"
-    private val KEY_FAVS = "key_pinned_favs_v3"
-    private val KEY_WIDGET_IDS = "key_widget_ids"
+    private val PREFS = "PixelStationGridPrefs"
+    private val KEY_FAVS = "key_pinned_favs_v4"
+    private val KEY_WIDGET_IDS = "key_widget_ids_v4"
+    private val KEY_FOLDERS = "key_shelves_v4"
 
     private val APPWIDGET_HOST_ID = 2048
     private val REQUEST_PICK_APPWIDGET = 101
     private val REQUEST_CREATE_APPWIDGET = 102
 
-    // Palette
+    // --- DARK CANVAS PALETTE ---
     private val COLOR_TRANSPARENT = Color.TRANSPARENT
     private val COLOR_SCRIM = Color.parseColor("#B3000000")
     private val COLOR_SHELF_BG = Color.parseColor("#28282B")
-    private val COLOR_SHELF_INNER = Color.parseColor("#3F4045")
+    private val COLOR_SHELF_INNER = Color.parseColor("#38383C")
     private val COLOR_WINDOW_BG = Color.parseColor("#1C1C1E")
     private val COLOR_WHITE = Color.parseColor("#FFFFFF")
-    private val COLOR_TEXT = Color.parseColor("#E4E4E7")
-    private val COLOR_MUTED = Color.parseColor("#9CA3AF")
+    private val COLOR_TEXT = Color.parseColor("#F4F4F5")
+    private val COLOR_MUTED = Color.parseColor("#A1A1AA")
 
-    data class AppItem(val name: String, val packageName: String, val rawIcon: Drawable, val themedIcon: Drawable)
+    data class AppItem(val name: String, val packageName: String, val icon: Drawable)
+    data class ShelfFolder(val title: String, val packages: MutableList<String>)
 
     private var allApps: List<AppItem> = emptyList()
     private var favoritePackages = mutableListOf<String>()
     private var savedWidgetIds = mutableListOf<Int>()
+    private var shelfFolders = mutableListOf<ShelfFolder>()
 
     private lateinit var appWidgetManager: AppWidgetManager
     private lateinit var appWidgetHost: AppWidgetHost
 
     private lateinit var rootLayout: FrameLayout
+    private lateinit var viewPager: ViewPager2
+    private lateinit var pageIndicatorTv: TextView
     private lateinit var widgetContainer: LinearLayout
-    private lateinit var favoritesGridLayout: GridLayout
+    private var favoritesGridLayout: GridLayout? = null
+    private var shelvesContainer: LinearLayout? = null
 
-    // Drawer Overlay Window
+    // Drawer Overlay
     private lateinit var drawerScrimLayer: FrameLayout
     private lateinit var drawerWindowSheet: LinearLayout
     private lateinit var drawerScroll: ScrollView
     private lateinit var drawerAppContainer: LinearLayout
     private lateinit var drawerTitleTv: TextView
 
-    // Alphabet Rail
+    // Bottom Alphabet Rail
     private lateinit var railContainer: LinearLayout
     private lateinit var floatingBadge: TextView
     private val alphabet = listOf('•') + ('A'..'Z').toList()
@@ -134,15 +142,28 @@ class MainActivity : Activity() {
         val p = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val favJson = p.getString(KEY_FAVS, null)
         val widgetJson = p.getString(KEY_WIDGET_IDS, null)
+        val shelfJson = p.getString(KEY_FOLDERS, null)
 
         favoritePackages = if (favJson != null) gson.fromJson(favJson, object : TypeToken<MutableList<String>>() {}.type) else mutableListOf()
         savedWidgetIds = if (widgetJson != null) gson.fromJson(widgetJson, object : TypeToken<MutableList<Int>>() {}.type) else mutableListOf()
+        shelfFolders = if (shelfJson != null) {
+            gson.fromJson(shelfJson, object : TypeToken<MutableList<ShelfFolder>>() {}.type)
+        } else {
+            mutableListOf(
+                ShelfFolder("Comms & Messaging", mutableListOf("com.google.android.apps.messaging", "com.google.android.dialer", "com.whatsapp", "com.discord")),
+                ShelfFolder("Reading & Codex", mutableListOf("md.obsidian", "com.amazon.kindle", "com.flyersoft.moonreader")),
+                ShelfFolder("Banking & HSBC", mutableListOf("uk.co.hsbc.hsbcukmobilebanking", "com.monzo.android")),
+                ShelfFolder("Development & Shell", mutableListOf("com.termux", "com.github.android", "io.github.gedoor.qreader")),
+                ShelfFolder("Transit & Maps", mutableListOf("com.trainpal", "com.thetrainline", "com.google.android.apps.maps"))
+            )
+        }
     }
 
     private fun saveUserData() {
         getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(KEY_FAVS, gson.toJson(favoritePackages))
             .putString(KEY_WIDGET_IDS, gson.toJson(savedWidgetIds))
+            .putString(KEY_FOLDERS, gson.toJson(shelfFolders))
             .apply()
     }
 
@@ -155,93 +176,48 @@ class MainActivity : Activity() {
             )
         }
 
-        val scroll = ScrollView(this).apply {
+        viewPager = ViewPager2(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
-            isVerticalScrollBarEnabled = false
+            orientation = ViewPager2.ORIENTATION_HORIZONTAL
         }
 
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(32, 40, 76, 32)
+        viewPager.adapter = object : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+            override fun getItemCount() = 2
+            override fun getItemViewType(position: Int) = position
+            override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+                val v = if (viewType == 0) buildPageOneMain() else buildPageTwoShelves()
+                return object : RecyclerView.ViewHolder(v) {}
+            }
+            override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {}
         }
 
-        // 1. Pixel At-a-Glance Top
-        val now = Calendar.getInstance()
-        val dTv = TextView(this).apply {
-            text = SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(now.time)
-            setTextColor(COLOR_WHITE)
-            textSize = 22f
-            typeface = Typeface.DEFAULT_BOLD
-        }
-        content.addView(dTv)
+        viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                pulseHaptic()
+                pageIndicatorTv.text = if (position == 0) "• ○" else "○ •"
+            }
+        })
+        rootLayout.addView(viewPager)
 
-        val weatherRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 4, 0, 16)
-        }
-        val weatherTv = TextView(this).apply {
-            text = "18°C"
-            setTextColor(COLOR_WHITE)
-            textSize = 15f
-            typeface = Typeface.DEFAULT_BOLD
-        }
-        weatherRow.addView(weatherTv)
-        content.addView(weatherRow)
-
-        // 2. Dynamic Widget Slot Container
-        widgetContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 0, 0, 8) }
-            layoutParams = lp
-        }
-        content.addView(widgetContainer)
-
-        val addWidgetBtn = TextView(this).apply {
-            text = "+ Pin Widget (Tasks / Calendar / Spotify)"
+        pageIndicatorTv = TextView(this).apply {
+            text = "• ○"
             setTextColor(COLOR_MUTED)
             textSize = 12f
+            letterSpacing = 0.2f
+            typeface = Typeface.MONOSPACE
             gravity = Gravity.CENTER
-            setPadding(16, 14, 16, 14)
-            background = createCardDrawable(COLOR_SHELF_BG, 20f)
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM
             ).apply { setMargins(0, 0, 0, 16) }
-            layoutParams = lp
-            setOnClickListener {
-                pulseHaptic()
-                launchWidgetPicker()
-            }
         }
-        content.addView(addWidgetBtn)
+        rootLayout.addView(pageIndicatorTv)
 
-        // 3. 4-Column Pinned App Grid
-        val grid = GridLayout(this).apply {
-            columnCount = 4
-            rowCount = 2
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 4, 0, 16) }
-            layoutParams = lp
-        }
-        favoritesGridLayout = grid
-        content.addView(grid)
-
-        // 4. Pixel Bottom Search Pill
-        content.addView(createPixelSearchPill())
-
-        scroll.addView(content)
-        rootLayout.addView(scroll)
-
-        // ================= APP DRAWER WINDOW SHEET =================
+        // ================= APP DRAWER OVERLAY =================
         drawerScrimLayer = FrameLayout(this).apply {
             setBackgroundColor(COLOR_SCRIM)
             visibility = View.GONE
@@ -257,10 +233,10 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             background = createCardDrawable(COLOR_WINDOW_BG, 32f)
             elevation = 40f
-            setPadding(32, 24, 76, 24)
+            setPadding(28, 20, 76, 24)
             val lp = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                (resources.displayMetrics.heightPixels * 0.78).toInt(),
+                (resources.displayMetrics.heightPixels * 0.75).toInt(),
                 Gravity.BOTTOM
             )
             layoutParams = lp
@@ -270,9 +246,9 @@ class MainActivity : Activity() {
 
         val handleBar = View(this).apply {
             background = createCardDrawable(COLOR_SHELF_INNER, 6f)
-            val lp = LinearLayout.LayoutParams(90, 10).apply {
+            val lp = LinearLayout.LayoutParams(80, 8).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
-                setMargins(0, 0, 0, 18)
+                setMargins(0, 0, 0, 16)
             }
             layoutParams = lp
         }
@@ -281,10 +257,10 @@ class MainActivity : Activity() {
         drawerTitleTv = TextView(this).apply {
             text = "APPLICATIONS"
             setTextColor(COLOR_WHITE)
-            textSize = 16f
-            letterSpacing = 0.12f
+            textSize = 15f
+            letterSpacing = 0.1f
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, 0, 0, 16)
+            setPadding(0, 0, 0, 14)
         }
         drawerWindowSheet.addView(drawerTitleTv)
 
@@ -306,32 +282,266 @@ class MainActivity : Activity() {
         floatingBadge = TextView(this).apply {
             visibility = View.GONE
             setTextColor(COLOR_WHITE)
-            textSize = 30f
+            textSize = 28f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            background = createCardDrawable(COLOR_SHELF_BG, 28f)
+            background = createCardDrawable(COLOR_SHELF_BG, 24f)
             elevation = 50f
-            layoutParams = FrameLayout.LayoutParams(116, 116, Gravity.END or Gravity.TOP).apply {
-                marginEnd = 80
+            layoutParams = FrameLayout.LayoutParams(104, 104, Gravity.END or Gravity.TOP).apply {
+                marginEnd = 76
             }
         }
         rootLayout.addView(floatingBadge)
 
-        // ================= ALPHABET RAIL =================
+        // ================= ENLARGED BOTTOM-ONLY ALPHABET RAIL =================
         val alphabetRail = buildAlphabetRail()
         rootLayout.addView(alphabetRail)
-
-        ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { _, insets ->
-            val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
-            content.setPadding(32, statusBarHeight + 16, 76, 32)
-            insets
-        }
 
         setContentView(rootLayout)
         restoreSavedWidgets()
         refreshAll()
     }
 
+    // ================= PAGE 1: PRIMARY CANVAS =================
+    private fun buildPageOneMain(): View {
+        val scroll = ScrollView(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            isVerticalScrollBarEnabled = false
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(28, 48, 72, 40)
+        }
+
+        val now = Calendar.getInstance()
+        val dTv = TextView(this).apply {
+            text = SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(now.time)
+            setTextColor(COLOR_WHITE)
+            textSize = 24f
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        content.addView(dTv)
+
+        val weatherTv = TextView(this).apply {
+            text = "18°C"
+            setTextColor(COLOR_WHITE)
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, 4, 0, 16)
+        }
+        content.addView(weatherTv)
+
+        widgetContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 0, 0, 8) }
+            layoutParams = lp
+        }
+        content.addView(widgetContainer)
+
+        val addWidgetBtn = TextView(this).apply {
+            text = "+ Pin Widget (Tasks / Calendar / Spotify)"
+            setTextColor(COLOR_MUTED)
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setPadding(16, 12, 16, 12)
+            background = createCardDrawable(COLOR_SHELF_BG, 18f)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 0, 0, 16) }
+            layoutParams = lp
+            setOnClickListener {
+                pulseHaptic()
+                launchWidgetPicker()
+            }
+        }
+        content.addView(addWidgetBtn)
+
+        val grid = GridLayout(this).apply {
+            columnCount = 4
+            rowCount = 2
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 0, 0, 14) }
+            layoutParams = lp
+        }
+        favoritesGridLayout = grid
+        content.addView(grid)
+
+        content.addView(createPixelSearchPill())
+
+        scroll.addView(content)
+        return scroll
+    }
+
+    // ================= PAGE 2: CATEGORY SHELVES =================
+    private fun buildPageTwoShelves(): View {
+        val scroll = ScrollView(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            isVerticalScrollBarEnabled = false
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(28, 48, 72, 48)
+        }
+
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, 16)
+        }
+
+        val title = TextView(this).apply {
+            text = "WORKSPACE SHELVES"
+            setTextColor(COLOR_WHITE)
+            textSize = 15f
+            letterSpacing = 0.1f
+            typeface = Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val addShelfBtn = TextView(this).apply {
+            text = "[ + SHELF ]"
+            setTextColor(COLOR_MUTED)
+            textSize = 11f
+            typeface = Typeface.MONOSPACE
+            setPadding(10, 6, 10, 6)
+            setOnClickListener { showAddShelfDialog() }
+        }
+        headerRow.addView(title)
+        headerRow.addView(addShelfBtn)
+        content.addView(headerRow)
+
+        shelvesContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        content.addView(shelvesContainer)
+
+        scroll.addView(content)
+        renderShelves()
+        return scroll
+    }
+
+    // ================= SHELF RENDERING & DIALOGS =================
+    private fun renderShelves() {
+        val container = shelvesContainer ?: return
+        container.removeAllViews()
+
+        for (shelf in shelfFolders) {
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(20, 16, 20, 16)
+                background = createCardDrawable(COLOR_SHELF_BG, 22f)
+                val lp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, 0, 0, 14) }
+                layoutParams = lp
+            }
+
+            val titleRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+
+            val tTv = TextView(this).apply {
+                text = shelf.title.uppercase()
+                setTextColor(COLOR_WHITE)
+                textSize = 12f
+                letterSpacing = 0.1f
+                typeface = Typeface.DEFAULT_BOLD
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            val countTv = TextView(this).apply {
+                text = "${shelf.packages.size}"
+                setTextColor(COLOR_MUTED)
+                textSize = 11f
+                typeface = Typeface.MONOSPACE
+            }
+            titleRow.addView(tTv)
+            titleRow.addView(countTv)
+            card.addView(titleRow)
+
+            val iconRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, 12, 0, 0)
+            }
+
+            val appsInShelf = allApps.filter { shelf.packages.contains(it.packageName) }
+            if (appsInShelf.isEmpty()) {
+                val emptyHint = TextView(this).apply {
+                    text = "Empty shelf. Long-press apps to add."
+                    setTextColor(COLOR_MUTED)
+                    textSize = 11f
+                }
+                iconRow.addView(emptyHint)
+            } else {
+                for (app in appsInShelf.take(5)) {
+                    val iv = ImageView(this).apply {
+                        setImageDrawable(app.icon)
+                        val size = 76
+                        layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, 14, 0) }
+                    }
+                    iconRow.addView(iv)
+                }
+            }
+            card.addView(iconRow)
+
+            card.setOnClickListener {
+                pulseHaptic()
+                showShelfDetailsDialog(shelf)
+            }
+            container.addView(card)
+        }
+    }
+
+    private fun showShelfDetailsDialog(shelf: ShelfFolder) {
+        val apps = allApps.filter { shelf.packages.contains(it.packageName) }
+        val names = apps.map { it.name }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(shelf.title)
+            .apply {
+                if (names.isEmpty()) setMessage("No tools inside this shelf.")
+                else setItems(names) { _, which -> launchApp(apps[which].packageName) }
+            }
+            .setPositiveButton("Close", null)
+            .show()
+    }
+
+    private fun showAddShelfDialog() {
+        val input = EditText(this).apply {
+            hint = "Shelf name (e.g. Comms, Banking)"
+            setTextColor(COLOR_WHITE)
+            setHintTextColor(COLOR_MUTED)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("New Workspace Shelf")
+            .setView(input)
+            .setPositiveButton("Create") { _, _ ->
+                val txt = input.text.toString().trim()
+                if (txt.isNotEmpty()) {
+                    shelfFolders.add(ShelfFolder(txt, mutableListOf()))
+                    saveUserData()
+                    renderShelves()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    // ================= DYNAMIC WIDGET HOSTING WITH RESIZING =================
     private fun launchWidgetPicker() {
         val appWidgetId = appWidgetHost.allocateAppWidgetId()
         val pickIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
@@ -346,13 +556,11 @@ class MainActivity : Activity() {
         if (resultCode == RESULT_OK) {
             when (requestCode) {
                 REQUEST_PICK_APPWIDGET -> {
-                    val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
-                        ?: return
+                    val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID) ?: return
                     configureOrBindWidget(appWidgetId)
                 }
                 REQUEST_CREATE_APPWIDGET -> {
-                    val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
-                        ?: return
+                    val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID) ?: return
                     attachWidgetView(appWidgetId)
                 }
             }
@@ -384,15 +592,21 @@ class MainActivity : Activity() {
             val lp = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 0, 0, 12) }
+            ).apply { setMargins(0, 0, 0, 14) }
             layoutParams = lp
         }
+
+        val displayMetrics = resources.displayMetrics
+        val density = displayMetrics.density
+        val widthDp = (displayMetrics.widthPixels / density).toInt() - 60
+        val heightDp = appWidgetInfo.minHeight.coerceAtLeast(140)
+        hostView.updateAppWidgetSize(null, widthDp, heightDp, widthDp, heightDp)
 
         hostView.setOnLongClickListener {
             pulseHaptic()
             AlertDialog.Builder(this@MainActivity)
                 .setTitle("Remove Widget")
-                .setMessage("Remove this widget from the station?")
+                .setMessage("Remove this widget from canvas?")
                 .setPositiveButton("Remove") { _, _ ->
                     appWidgetHost.deleteAppWidgetId(appWidgetId)
                     savedWidgetIds.remove(appWidgetId)
@@ -427,6 +641,7 @@ class MainActivity : Activity() {
         saveUserData()
     }
 
+    // ================= APP GRID WITH COLOR ICONS =================
     private fun renderFavoritesGrid() {
         val grid = favoritesGridLayout ?: return
         grid.removeAllViews()
@@ -445,7 +660,7 @@ class MainActivity : Activity() {
             val tile = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(4, 8, 4, 8)
+                setPadding(4, 6, 4, 6)
                 layoutParams = GridLayout.LayoutParams().apply {
                     width = tileWidth
                     height = ViewGroup.LayoutParams.WRAP_CONTENT
@@ -455,19 +670,12 @@ class MainActivity : Activity() {
                 isFocusable = true
             }
 
-            val iconFrame = FrameLayout(this).apply {
-                background = createCardDrawable(COLOR_SHELF_BG, 26f)
+            val icon = ImageView(this).apply {
+                setImageDrawable(app.icon)
                 val size = 96
                 layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, 0, 6) }
             }
-
-            val icon = ImageView(this).apply {
-                setImageDrawable(app.themedIcon)
-                val innerSize = 58
-                layoutParams = FrameLayout.LayoutParams(innerSize, innerSize, Gravity.CENTER)
-            }
-            iconFrame.addView(icon)
-            tile.addView(iconFrame)
+            tile.addView(icon)
 
             val name = TextView(this).apply {
                 text = app.name
@@ -496,12 +704,12 @@ class MainActivity : Activity() {
         val searchBox = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(20, 14, 20, 14)
+            setPadding(18, 14, 18, 14)
             background = createCardDrawable(COLOR_SHELF_BG, 28f)
             val lp = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 4, 0, 0) }
+            ).apply { setMargins(0, 2, 0, 0) }
             layoutParams = lp
         }
 
@@ -544,15 +752,16 @@ class MainActivity : Activity() {
         return searchBox
     }
 
+    // ================= ENLARGED BOTTOM-ANCHORED ALPHABET RAIL =================
     @SuppressLint("ClickableViewAccessibility")
     private fun buildAlphabetRail(): View {
         railContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            layoutParams = FrameLayout.LayoutParams(60, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END or Gravity.BOTTOM).apply {
-                setMargins(0, 0, 6, 60)
+            layoutParams = FrameLayout.LayoutParams(56, 520, Gravity.END or Gravity.BOTTOM).apply {
+                setMargins(0, 0, 4, 40)
             }
-            setPadding(0, 12, 4, 12)
+            setPadding(0, 8, 2, 8)
         }
 
         railViews.clear()
@@ -560,10 +769,10 @@ class MainActivity : Activity() {
             val tv = TextView(this).apply {
                 text = c.toString()
                 setTextColor(COLOR_MUTED)
-                textSize = 12f
-                typeface = Typeface.MONOSPACE
+                textSize = 9.5f
+                typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
-                setPadding(4, 2, 4, 2)
+                setPadding(2, 0, 2, 0)
             }
             railViews.add(tv)
             railContainer.addView(tv)
@@ -591,17 +800,17 @@ class MainActivity : Activity() {
                     }
 
                     floatingBadge.visibility = View.VISIBLE
-                    val badgeY = (event.rawY - 160).coerceIn(120f, (rootLayout.height - 240).toFloat())
+                    val badgeY = (event.rawY - 140).coerceIn(120f, (rootLayout.height - 240).toFloat())
                     floatingBadge.y = badgeY
                     floatingBadge.text = selectedChar.toString()
 
                     for (i in railViews.indices) {
                         if (i == targetIdx) {
                             railViews[i].setTextColor(COLOR_WHITE)
-                            railViews[i].setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
+                            railViews[i].setTypeface(Typeface.DEFAULT_BOLD)
                         } else {
                             railViews[i].setTextColor(COLOR_MUTED)
-                            railViews[i].setTypeface(Typeface.MONOSPACE, Typeface.NORMAL)
+                            railViews[i].setTypeface(Typeface.DEFAULT)
                         }
                     }
 
@@ -617,7 +826,7 @@ class MainActivity : Activity() {
                     floatingBadge.visibility = View.GONE
                     for (v in railViews) {
                         v.setTextColor(COLOR_MUTED)
-                        v.setTypeface(Typeface.MONOSPACE, Typeface.NORMAL)
+                        v.setTypeface(Typeface.DEFAULT)
                     }
                     lastHoverIndex = -1
                     true
@@ -668,24 +877,17 @@ class MainActivity : Activity() {
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(12, 12, 12, 12)
+                setPadding(12, 10, 12, 10)
                 isClickable = true
                 isFocusable = true
             }
 
-            val iconFrame = FrameLayout(this).apply {
-                background = createCardDrawable(COLOR_SHELF_INNER, 20f)
-                val size = 80
+            val icon = ImageView(this).apply {
+                setImageDrawable(app.icon)
+                val size = 84
                 layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, 16, 0) }
             }
-
-            val icon = ImageView(this).apply {
-                setImageDrawable(app.themedIcon)
-                val innerSize = 48
-                layoutParams = FrameLayout.LayoutParams(innerSize, innerSize, Gravity.CENTER)
-            }
-            iconFrame.addView(icon)
-            row.addView(iconFrame)
+            row.addView(icon)
 
             val name = TextView(this).apply {
                 text = app.name
@@ -739,34 +941,47 @@ class MainActivity : Activity() {
 
         saveUserData()
         renderFavoritesGrid()
-        Toast.makeText(this@MainActivity, "Pixel tools organized", Toast.LENGTH_SHORT).show()
     }
 
     private fun sanitizeSavedData() {
         val installed = allApps.map { it.packageName }.toSet()
-        val favChanged = favoritePackages.retainAll(installed)
-        if (favChanged) saveUserData()
+        favoritePackages.retainAll(installed)
+        for (f in shelfFolders) f.packages.retainAll(installed)
+        saveUserData()
     }
 
     private fun refreshAll() {
         allApps = loadInstalledApps()
         sanitizeSavedData()
         renderFavoritesGrid()
+        renderShelves()
     }
 
     private fun showAppOptions(app: AppItem) {
         val isFav = favoritePackages.contains(app.packageName)
-        val favLabel = if (isFav) "Unpin from Pixel Grid" else "Pin to Pixel Grid (Max 8)"
+        val favLabel = if (isFav) "Unpin from Main Canvas" else "Pin to Main Canvas (Max 8)"
+        val opts = mutableListOf(favLabel)
+        for (shelf in shelfFolders) {
+            opts.add("Add to: ${shelf.title}")
+        }
 
         AlertDialog.Builder(this)
             .setTitle(app.name)
-            .setItems(arrayOf(favLabel)) { _, which ->
+            .setItems(opts.toTypedArray()) { _, which ->
                 if (which == 0) {
                     if (isFav) favoritePackages.remove(app.packageName)
                     else if (favoritePackages.size < 8) favoritePackages.add(app.packageName)
-                    else Toast.makeText(this@MainActivity, "Pixel Grid full (Max 8)", Toast.LENGTH_SHORT).show()
+                    else Toast.makeText(this@MainActivity, "Canvas grid full (Max 8)", Toast.LENGTH_SHORT).show()
                     saveUserData()
                     renderFavoritesGrid()
+                } else {
+                    val shelf = shelfFolders[which - 1]
+                    if (!shelf.packages.contains(app.packageName)) {
+                        shelf.packages.add(app.packageName)
+                        saveUserData()
+                        renderShelves()
+                        Toast.makeText(this@MainActivity, "Added to ${shelf.title}", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }.show()
     }
@@ -789,52 +1004,12 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun applyPixelMonochromeFilter(drawable: Drawable): Drawable {
-        val bitmap = try {
-            if (drawable is BitmapDrawable && drawable.bitmap != null) {
-                drawable.bitmap
-            } else {
-                val bmp = Bitmap.createBitmap(
-                    drawable.intrinsicWidth.coerceAtLeast(64),
-                    drawable.intrinsicHeight.coerceAtLeast(64),
-                    Bitmap.Config.ARGB_8888
-                )
-                val canvas = Canvas(bmp)
-                drawable.setBounds(0, 0, canvas.width, canvas.height)
-                drawable.draw(canvas)
-                bmp
-            }
-        } catch (_: Exception) {
-            return drawable
-        }
-
-        val output = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(output)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-
-        val matrix = ColorMatrix().apply {
-            setSaturation(0f)
-            val scale = 1.3f
-            postConcat(
-                ColorMatrix(
-                    floatArrayOf(
-                        scale, 0f, 0f, 0f, 30f,
-                        0f, scale, 0f, 0f, 30f,
-                        0f, 0f, scale, 0f, 30f,
-                        0f, 0f, 0f, 1f, 0f
-                    )
-                )
-            )
-        }
-        paint.colorFilter = ColorMatrixColorFilter(matrix)
-        canvas.drawBitmap(bitmap, 0f, 0f, paint)
-        return BitmapDrawable(resources, output)
-    }
-
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (drawerScrimLayer.visibility == View.VISIBLE) {
             hideAppDrawer()
+        } else if (viewPager.currentItem != 0) {
+            viewPager.currentItem = 0
         }
     }
 
@@ -862,8 +1037,7 @@ class MainActivity : Activity() {
             if (pName == packageName) continue
             val label = info.loadLabel(packageManager)?.toString() ?: pName
             val rawIcon = info.loadIcon(packageManager)
-            val themedIcon = applyPixelMonochromeFilter(rawIcon)
-            list.add(AppItem(label, pName, rawIcon, themedIcon))
+            list.add(AppItem(label, pName, rawIcon))
         }
         return list.sortedBy { it.name.lowercase() }
     }
