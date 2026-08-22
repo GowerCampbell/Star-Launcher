@@ -40,18 +40,18 @@ import java.util.*
 class MainActivity : Activity() {
 
     private val gson = Gson()
-    private val PREFS = "CharcoalWorkstationPrefs"
-    private val KEY_FAVS = "key_pinned_grid"
+    private val PREFS = "PixelStationPrefs"
+    private val KEY_FAVS = "key_pinned_grid_8"
     private val KEY_FOLDERS = "key_folders"
     private val KEY_TASKS = "key_tasks"
     private val KEY_HOUSE_ITEMS = "key_house_items"
     private val KEY_ALARM_ENABLED = "key_alarm_enabled"
     private val KEY_READING_NOTE = "key_reading_note"
 
-    // --- TRANSLUCENT FROSTED GLASS PALETTE ---
+    // --- TRANSLUCENT OBSIDIAN & BONE PALETTE ---
     private val COLOR_TRANSPARENT = Color.TRANSPARENT
-    private val COLOR_GLASS_SURFACE = Color.parseColor("#33121215") // 20% translucent smoked glass
-    private val COLOR_GLASS_CARD = Color.parseColor("#4D18181F")    // 30% translucent frosted card
+    private val COLOR_GLASS_SURFACE = Color.parseColor("#33121215") // 20% smoked glass
+    private val COLOR_GLASS_CARD = Color.parseColor("#4D18181F")    // 30% frosted card
     private val COLOR_GLASS_LIT = Color.parseColor("#8027272A")     // 50% lit highlight
     private val COLOR_WHITE = Color.parseColor("#FFFFFF")          // Pure white
     private val COLOR_TEXT = Color.parseColor("#E4E4E7")           // Warm bone white
@@ -84,18 +84,15 @@ class MainActivity : Activity() {
     // Dynamic View References
     private var timeTv: TextView? = null
     private var dateTv: TextView? = null
-    private var sleepCountdownTv: TextView? = null
-    private var alarmToggleBtn: TextView? = null
+    private var alarmPillTv: TextView? = null
     private var trackTitleTv: TextView? = null
-    private var trackArtistTv: TextView? = null
-    private var searchInput: EditText? = null
+    private var quickNoteSnippetTv: TextView? = null
     private var favoritesGridLayout: GridLayout? = null
-    private var foldersRow: LinearLayout? = null
     private var tasksContainer: LinearLayout? = null
     private var houseItemsContainer: LinearLayout? = null
     private var readingNoteTv: TextView? = null
 
-    // Alphabet Rail
+    // Enlarged Bottom Alphabet Rail
     private lateinit var railContainer: LinearLayout
     private lateinit var floatingBadge: TextView
     private val alphabet = listOf('•') + ('A'..'Z').toList()
@@ -103,7 +100,6 @@ class MainActivity : Activity() {
     private var lastHoverIndex = -1
 
     private var vibrator: Vibrator? = null
-
     private var touchStartY = 0f
     private var isTrackingSwipeDown = false
 
@@ -112,10 +108,9 @@ class MainActivity : Activity() {
             when (intent?.action) {
                 Intent.ACTION_TIME_TICK, Intent.ACTION_TIME_CHANGED -> updateClockAndSleepData()
                 "com.spotify.music.playbackstatechanged", "com.spotify.music.metadatachanged" -> {
-                    val track = intent.getStringExtra("track") ?: "Now Playing"
-                    val artist = intent.getStringExtra("artist") ?: "Spotify"
-                    val isPlaying = intent.getBooleanExtra("playing", false)
-                    updateMedia(track, artist, isPlaying)
+                    val track = intent.getStringExtra("track") ?: "Spotify"
+                    val artist = intent.getStringExtra("artist") ?: ""
+                    updateMedia(track, artist)
                 }
             }
         }
@@ -171,7 +166,7 @@ class MainActivity : Activity() {
                 vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
             } else {
                 @Suppress("DEPRECATION")
-                vibrator?.vibrate(10)
+                vibrator?.vibrate(12)
             }
         } catch (_: Exception) {}
     }
@@ -184,9 +179,8 @@ class MainActivity : Activity() {
         dateTv?.text = dateFormat.format(now.time).uppercase()
 
         if (!isAlarmEnabled) {
-            sleepCountdownTv?.text = "03:45 ALARM DISABLED • REST DAY"
-            alarmToggleBtn?.text = "[ REST DAY ]"
-            alarmToggleBtn?.setTextColor(COLOR_MUTED)
+            alarmPillTv?.text = "ALARM: OFF"
+            alarmPillTv?.setTextColor(COLOR_MUTED)
             return
         }
 
@@ -202,9 +196,8 @@ class MainActivity : Activity() {
         val diffHours = diffMs / (1000 * 60 * 60)
         val diffMinutes = (diffMs / (1000 * 60)) % 60
 
-        sleepCountdownTv?.text = "WAKE 03:45 (${diffHours}h ${diffMinutes}m remaining)"
-        alarmToggleBtn?.text = "[ ARMED: 03:45 ]"
-        alarmToggleBtn?.setTextColor(COLOR_WHITE)
+        alarmPillTv?.text = "03:45 (${diffHours}h ${diffMinutes}m)"
+        alarmPillTv?.setTextColor(COLOR_WHITE)
     }
 
     private fun toggleAlarmState() {
@@ -243,9 +236,8 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun updateMedia(track: String, artist: String, isPlaying: Boolean) {
-        trackTitleTv?.text = track
-        trackArtistTv?.text = if (isPlaying) "Playing • $artist" else "Paused • $artist"
+    private fun updateMedia(track: String, artist: String) {
+        trackTitleTv?.text = if (artist.isNotEmpty()) "$track • $artist" else track
     }
 
     private fun loadUserData() {
@@ -304,12 +296,14 @@ class MainActivity : Activity() {
         favoritePackages.clear()
 
         val priorityTargets = listOf(
-            "com.google.android.apps.chromecast.app", // Google Home
             "md.obsidian",
             "com.termux",
             "com.bandlab.bandlab",
+            "com.github.android",
             "com.thetrainline",
-            "com.google.android.GoogleCamera"
+            "com.google.android.apps.chromecast.app", // Google Home
+            "com.google.android.GoogleCamera",
+            "com.android.settings"
         )
 
         for (target in priorityTargets) {
@@ -319,7 +313,7 @@ class MainActivity : Activity() {
         }
 
         for (app in allApps) {
-            if (favoritePackages.size >= 6) break
+            if (favoritePackages.size >= 8) break
             if (!favoritePackages.contains(app.packageName)) {
                 favoritePackages.add(app.packageName)
             }
@@ -327,48 +321,7 @@ class MainActivity : Activity() {
 
         saveUserData()
         renderFavoritesGrid()
-        Toast.makeText(this, "Core 2×3 Grid reset to defaults", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun autoSortShelves() {
-        pulseHaptic()
-        for (folder in folders) folder.packages.clear()
-
-        for (app in allApps) {
-            val name = app.name.lowercase()
-            val pkg = app.packageName.lowercase()
-
-            when {
-                name.contains("obsidian") || name.contains("note") || name.contains("reader") || name.contains("kindle") || name.contains("docs") -> {
-                    folders.firstOrNull { it.name.contains("Writing", true) }?.packages?.add(app.packageName)
-                }
-                name.contains("termux") || name.contains("git") || name.contains("code") || name.contains("terminal") || name.contains("godot") -> {
-                    folders.firstOrNull { it.name.contains("Dev", true) }?.packages?.add(app.packageName)
-                }
-                name.contains("bandlab") || name.contains("spotify") || name.contains("music") || name.contains("painter") || name.contains("audio") -> {
-                    folders.firstOrNull { it.name.contains("Sound", true) }?.packages?.add(app.packageName)
-                }
-                name.contains("home") || name.contains("train") || name.contains("map") || name.contains("pay") || name.contains("ikea") || name.contains("amazon") -> {
-                    folders.firstOrNull { it.name.contains("Home", true) || it.name.contains("Transit", true) }?.packages?.add(app.packageName)
-                }
-                else -> {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        when (app.category) {
-                            ApplicationInfo.CATEGORY_AUDIO, ApplicationInfo.CATEGORY_IMAGE, ApplicationInfo.CATEGORY_VIDEO ->
-                                folders.firstOrNull { it.name.contains("Sound", true) }?.packages?.add(app.packageName)
-                            ApplicationInfo.CATEGORY_MAPS ->
-                                folders.firstOrNull { it.name.contains("Home", true) }?.packages?.add(app.packageName)
-                            ApplicationInfo.CATEGORY_PRODUCTIVITY ->
-                                folders.firstOrNull { it.name.contains("Writing", true) }?.packages?.add(app.packageName)
-                        }
-                    }
-                }
-            }
-        }
-
-        saveUserData()
-        renderFolders()
-        Toast.makeText(this, "Workspace shelves self-organized", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Core 8 Apps reset to defaults", Toast.LENGTH_SHORT).show()
     }
 
     private fun buildSlideInterface() {
@@ -411,7 +364,7 @@ class MainActivity : Activity() {
             override fun getItemCount() = 2
             override fun getItemViewType(position: Int) = position
             override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-                val view = if (viewType == 0) buildMainStationPage() else buildDirectivesAndHousePage()
+                val view = if (viewType == 0) buildMainViewportPage() else buildExpandedLedgerPage()
                 return object : RecyclerView.ViewHolder(view) {}
             }
             override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {}
@@ -420,25 +373,25 @@ class MainActivity : Activity() {
         viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 pulseHaptic()
-                pageIndicatorTv.text = if (position == 0) "[ LIVING STATION • HOUSE & CODEX ]" else "[ LIVING STATION • HOUSE & CODEX* ]"
+                pageIndicatorTv.text = if (position == 0) "• ○" else "○ •"
             }
         })
 
         rootLayout.addView(viewPager)
 
         pageIndicatorTv = TextView(this).apply {
-            text = "[ LIVING STATION • HOUSE & CODEX ]"
+            text = "• ○"
             setTextColor(COLOR_MUTED)
-            textSize = 10f
-            letterSpacing = 0.15f
+            textSize = 12f
+            letterSpacing = 0.2f
             typeface = Typeface.MONOSPACE
             gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP
+                Gravity.BOTTOM
             ).apply {
-                setMargins(0, 32, 0, 0)
+                setMargins(0, 0, 0, 24)
             }
         }
         rootLayout.addView(pageIndicatorTv)
@@ -464,7 +417,7 @@ class MainActivity : Activity() {
         }
 
         drawerTitleTv = TextView(this).apply {
-            text = "APPLICATIONS"
+            text = "ALL APPLICATIONS"
             setTextColor(COLOR_WHITE)
             textSize = 15f
             letterSpacing = 0.14f
@@ -502,13 +455,13 @@ class MainActivity : Activity() {
         }
         rootLayout.addView(floatingBadge)
 
-        // ================= BOTTOM-ANCHORED ALPHABET RAIL =================
+        // ================= ENLARGED BOTTOM-ANCHORED ALPHABET RAIL =================
         val alphabetRail = buildAlphabetRail()
         rootLayout.addView(alphabetRail)
 
         ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { _, insets ->
             val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
-            pageIndicatorTv.translationY = statusBarHeight.toFloat()
+            viewPager.setPadding(0, statusBarHeight, 0, 0)
             insets
         }
 
@@ -516,42 +469,40 @@ class MainActivity : Activity() {
         refreshAll()
     }
 
-    private fun buildMainStationPage(): View {
-        val scroll = ScrollView(this).apply {
+    // ================= PAGE 0: NO-SCROLL LIVING WORKSTATION =================
+    private fun buildMainViewportPage(): View {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(32, 24, 76, 32)
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
-            isVerticalScrollBarEnabled = false
         }
 
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(36, 68, 80, 120)
-        }
+        // 1. Pixel At-A-Glance Chrono & Status
+        layout.addView(createAtAGlanceHeader())
 
-        content.addView(createChronoAndSleepBeacon())
-        content.addView(createHomeAndCommuteDeck())
-        content.addView(createOmniSearch())
-        content.addView(createAudioDeck())
+        // 2. iOS-Style Square Stack (2 Columns: Directives Note on Left, Media & Home on Right)
+        layout.addView(createSmartSquareStack())
 
-        // 2x3 Grid Header with Reset to Defaults action
+        // 3. Core Apps 4x2 Fixed Grid (Thumb Zone)
         val favHeaderRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 18, 0, 10)
+            setPadding(0, 16, 0, 8)
         }
 
         val favHeader = TextView(this).apply {
-            text = "CORE TOOLS (2×3)"
+            text = "FAVOURITES"
             setTextColor(COLOR_WHITE)
             textSize = 11f
-            letterSpacing = 0.16f
+            letterSpacing = 0.14f
             typeface = Typeface.MONOSPACE
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
         val resetFavsBtn = TextView(this).apply {
-            text = "[ RESET DEFAULTS ]"
+            text = "[ RESET ]"
             setTextColor(COLOR_MUTED)
             textSize = 10f
             typeface = Typeface.MONOSPACE
@@ -560,74 +511,29 @@ class MainActivity : Activity() {
         }
         favHeaderRow.addView(favHeader)
         favHeaderRow.addView(resetFavsBtn)
-        content.addView(favHeaderRow)
+        layout.addView(favHeaderRow)
 
         val grid = GridLayout(this).apply {
-            columnCount = 3
+            columnCount = 4
             rowCount = 2
             val lp = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
-            lp.setMargins(0, 0, 0, 18)
             layoutParams = lp
         }
         favoritesGridLayout = grid
-        content.addView(grid)
+        layout.addView(grid)
 
-        // Workspace Shelves Header with Auto-Sort action
-        val foldHeaderRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 10, 0, 10)
-        }
+        // 4. Quick Omni-Search Bar (Anchored at base)
+        layout.addView(createOmniSearch())
 
-        val foldHeader = TextView(this).apply {
-            text = "WORKSPACE SHELVES"
-            setTextColor(COLOR_WHITE)
-            textSize = 11f
-            letterSpacing = 0.16f
-            typeface = Typeface.MONOSPACE
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        }
-        val autoSortBtn = TextView(this).apply {
-            text = "[ AUTO-SORT ]"
-            setTextColor(COLOR_MUTED)
-            textSize = 10f
-            typeface = Typeface.MONOSPACE
-            setPadding(8, 4, 8, 4)
-            setOnClickListener { autoSortShelves() }
-        }
-        foldHeaderRow.addView(foldHeader)
-        foldHeaderRow.addView(autoSortBtn)
-        content.addView(foldHeaderRow)
-
-        val foldersContainer = HorizontalScrollView(this).apply {
-            isFillViewport = true
-            isHorizontalScrollBarEnabled = false
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            lp.setMargins(0, 0, 0, 18)
-            layoutParams = lp
-            setOnTouchListener { _, _ ->
-                parent.requestDisallowInterceptTouchEvent(true)
-                false
-            }
-        }
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        foldersRow = row
-        foldersContainer.addView(row)
-        content.addView(foldersContainer)
-
-        scroll.addView(content)
         renderFavoritesGrid()
-        renderFolders()
-        return scroll
+        return layout
     }
 
-    private fun buildDirectivesAndHousePage(): View {
+    // ================= PAGE 1: EXPANDED DIRECTIVES & HOUSE LEDGER =================
+    private fun buildExpandedLedgerPage(): View {
         val scroll = ScrollView(this).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -638,20 +544,16 @@ class MainActivity : Activity() {
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(36, 68, 80, 120)
+            setPadding(32, 24, 76, 80)
         }
 
-        // 1. New House Purchase & Project Wishlist
         content.addView(createHouseWishlistModule())
-
-        // 2. Reading & Narrative Codex Module
         content.addView(createReadingHubModule())
 
-        // 3. Directives Ledger
         val headerRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 20, 0, 16)
+            setPadding(0, 16, 0, 12)
         }
 
         val title = TextView(this).apply {
@@ -677,7 +579,7 @@ class MainActivity : Activity() {
 
         val tasks = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, 8, 0, 0)
+            setPadding(0, 4, 0, 0)
         }
         tasksContainer = tasks
         content.addView(tasks)
@@ -688,89 +590,94 @@ class MainActivity : Activity() {
         return scroll
     }
 
-    private fun createChronoAndSleepBeacon(): View {
-        val card = LinearLayout(this).apply {
+    // ================= AT-A-GLANCE HEADER =================
+    private fun createAtAGlanceHeader(): View {
+        val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(26, 22, 26, 22)
-            background = createCardDrawable(COLOR_GLASS_CARD, 18f, COLOR_BORDER)
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            lp.setMargins(0, 0, 0, 14)
-            layoutParams = lp
+            setPadding(0, 8, 0, 12)
         }
 
         val tTv = TextView(this).apply {
             setTextColor(COLOR_WHITE)
-            textSize = 38f
-            letterSpacing = 0.04f
-            typeface = Typeface.MONOSPACE
+            textSize = 42f
+            letterSpacing = 0.02f
+            typeface = Typeface.DEFAULT_BOLD
         }
         timeTv = tTv
 
         val dTv = TextView(this).apply {
-            setTextColor(COLOR_MUTED)
-            textSize = 12f
-            letterSpacing = 0.12f
+            setTextColor(COLOR_TEXT)
+            textSize = 13f
+            letterSpacing = 0.08f
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, 4, 0, 12)
+            setPadding(0, 0, 0, 10)
         }
         dateTv = dTv
 
-        val sleepRow = LinearLayout(this).apply {
+        val statusRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 8, 0, 0)
         }
 
-        val sTv = TextView(this).apply {
-            setTextColor(COLOR_TEXT)
-            textSize = 11f
-            letterSpacing = 0.06f
-            typeface = Typeface.MONOSPACE
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        }
-        sleepCountdownTv = sTv
-
-        val armBtn = TextView(this).apply {
-            text = if (isAlarmEnabled) "[ ARMED: 03:45 ]" else "[ REST DAY ]"
-            setTextColor(if (isAlarmEnabled) COLOR_WHITE else COLOR_MUTED)
+        val alarmPill = TextView(this).apply {
             textSize = 11f
             typeface = Typeface.MONOSPACE
-            setPadding(12, 6, 12, 6)
-            background = createCardDrawable(COLOR_GLASS_LIT, 10f, COLOR_BORDER)
+            setPadding(14, 6, 14, 6)
+            background = createCardDrawable(COLOR_GLASS_CARD, 20f, COLOR_BORDER)
             setOnClickListener { toggleAlarmState() }
         }
-        alarmToggleBtn = armBtn
+        alarmPillTv = alarmPill
+        statusRow.addView(alarmPill)
 
-        sleepRow.addView(sTv)
-        sleepRow.addView(armBtn)
+        val transitPill = TextView(this).apply {
+            text = "FEN LINE: Downham Mkt"
+            setTextColor(COLOR_TEXT)
+            textSize = 11f
+            typeface = Typeface.MONOSPACE
+            setPadding(14, 6, 14, 6)
+            background = createCardDrawable(COLOR_GLASS_CARD, 20f, COLOR_BORDER)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(10, 0, 0, 0) }
+            layoutParams = lp
+            setOnClickListener {
+                pulseHaptic()
+                val trainApp = packageManager.getLaunchIntentForPackage("com.trainpal")
+                    ?: packageManager.getLaunchIntentForPackage("com.thetrainline")
+                if (trainApp != null) startActivity(trainApp)
+                else {
+                    val browser = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.nationalrail.co.uk/live-trains/departures/downham-market/"))
+                    startActivity(browser)
+                }
+            }
+        }
+        statusRow.addView(transitPill)
 
-        card.addView(tTv)
-        card.addView(dTv)
-        card.addView(sleepRow)
+        container.addView(tTv)
+        container.addView(dTv)
+        container.addView(statusRow)
         updateClockAndSleepData()
-        return card
+        return container
     }
 
-    // ================= DOWNHAM MARKET HOME & COMMUTE DOCK =================
-    private fun createHomeAndCommuteDeck(): View {
-        val container = LinearLayout(this).apply {
+    // ================= IOS-STYLE SMART SQUARE STACK =================
+    private fun createSmartSquareStack(): View {
+        val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             val lp = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 0, 0, 14) }
+                310 // Ergonomic square widget height
+            ).apply { setMargins(0, 4, 0, 8) }
             layoutParams = lp
         }
 
-        // Smart Home Capsule
-        val homeTile = LinearLayout(this).apply {
+        // Left 2x2 Square: Directives / Quick Notes Scratchpad
+        val noteSquare = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(18, 14, 18, 14)
-            background = createIlluminatedState(COLOR_GLASS_CARD, COLOR_GLASS_LIT, 14f, COLOR_BORDER)
-            val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            setPadding(20, 18, 20, 18)
+            background = createIlluminatedState(COLOR_GLASS_CARD, COLOR_GLASS_LIT, 22f, COLOR_BORDER)
+            val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply {
                 setMargins(0, 0, 8, 0)
             }
             layoutParams = lp
@@ -778,431 +685,74 @@ class MainActivity : Activity() {
             isFocusable = true
         }
 
-        val homeTag = TextView(this).apply {
-            text = "HOME HUB"
+        val noteTag = TextView(this).apply {
+            text = "DIRECTIVES"
             setTextColor(COLOR_WHITE)
             textSize = 10f
             letterSpacing = 0.12f
             typeface = Typeface.MONOSPACE
         }
-        val homeSub = TextView(this).apply {
-            text = "Smart Controls"
-            setTextColor(COLOR_MUTED)
-            textSize = 11f
-            setPadding(0, 4, 0, 0)
+        val noteBody = TextView(this).apply {
+            text = if (taskList.isNotEmpty()) taskList.first().text else "No active directives. Swipe left to manage."
+            setTextColor(COLOR_TEXT)
+            textSize = 13f
+            maxLines = 4
+            setPadding(0, 8, 0, 0)
         }
-        homeTile.addView(homeTag)
-        homeTile.addView(homeSub)
-        homeTile.setOnClickListener {
-            pulseHaptic()
-            val homeApp = packageManager.getLaunchIntentForPackage("com.google.android.apps.chromecast.app")
-                ?: packageManager.getLaunchIntentForPackage("io.homeassistant.companion.android")
-                ?: packageManager.getLaunchIntentForPackage("com.tuya.smartlife")
-            if (homeApp != null) startActivity(homeApp)
-            else Toast.makeText(this, "Smart Home app not configured", Toast.LENGTH_SHORT).show()
-        }
-        container.addView(homeTile)
+        quickNoteSnippetTv = noteBody
 
-        // Fen Line Commute Capsule
-        val transitTile = LinearLayout(this).apply {
+        noteSquare.addView(noteTag)
+        noteSquare.addView(noteBody)
+        noteSquare.setOnClickListener {
+            pulseHaptic()
+            viewPager.currentItem = 1 // Swipe directly to directives page
+        }
+        row.addView(noteSquare)
+
+        // Right 2x2 Square: Media & Smart Home Control Stack
+        val actionSquare = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(18, 14, 18, 14)
-            background = createIlluminatedState(COLOR_GLASS_CARD, COLOR_GLASS_LIT, 14f, COLOR_BORDER)
-            val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            setPadding(20, 18, 20, 18)
+            background = createCardDrawable(COLOR_GLASS_CARD, 22f, COLOR_BORDER)
+            val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply {
                 setMargins(8, 0, 0, 0)
             }
             layoutParams = lp
-            isClickable = true
-            isFocusable = true
         }
 
-        val transitTag = TextView(this).apply {
-            text = "FEN LINE"
+        val mediaTag = TextView(this).apply {
+            text = "MEDIA & HOME"
             setTextColor(COLOR_WHITE)
             textSize = 10f
             letterSpacing = 0.12f
             typeface = Typeface.MONOSPACE
         }
-        val transitSub = TextView(this).apply {
-            text = "TrainPal / Rail"
-            setTextColor(COLOR_MUTED)
-            textSize = 11f
-            setPadding(0, 4, 0, 0)
-        }
-        transitTile.addView(transitTag)
-        transitTile.addView(transitSub)
-        transitTile.setOnClickListener {
-            pulseHaptic()
-            val trainApp = packageManager.getLaunchIntentForPackage("com.trainpal")
-                ?: packageManager.getLaunchIntentForPackage("com.thetrainline")
-            if (trainApp != null) startActivity(trainApp)
-            else {
-                val browser = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.nationalrail.co.uk/live-trains/departures/downham-market/"))
-                startActivity(browser)
-            }
-        }
-        container.addView(transitTile)
+        actionSquare.addView(mediaTag)
 
-        return container
-    }
-
-    // ================= NEW HOUSE WISHLIST MODULE =================
-    private fun createHouseWishlistModule(): View {
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(24, 20, 24, 20)
-            background = createCardDrawable(COLOR_GLASS_CARD, 16f, COLOR_BORDER)
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 0, 0, 16) }
-            layoutParams = lp
-        }
-
-        val topRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        val title = TextView(this).apply {
-            text = "NEW HOUSE • PURCHASES & PROJECTS"
-            setTextColor(COLOR_WHITE)
-            textSize = 12f
-            letterSpacing = 0.12f
-            typeface = Typeface.MONOSPACE
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        }
-        val addBtn = TextView(this).apply {
-            text = "[ + ITEM ]"
-            setTextColor(COLOR_MUTED)
-            textSize = 10f
-            typeface = Typeface.MONOSPACE
-            setPadding(10, 4, 10, 4)
-            setOnClickListener { showAddHouseItemDialog() }
-        }
-        topRow.addView(title)
-        topRow.addView(addBtn)
-        card.addView(topRow)
-
-        houseItemsContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, 12, 0, 12)
-        }
-        card.addView(houseItemsContainer)
-
-        // Retail Quick Bar (John Lewis, Amazon, Homeware)
-        val retailRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        val retailPkgs = listOf(
-            "uk.co.johnlewis.android",
-            "com.amazon.mShop.android.shopping",
-            "com.ikea.inter.appshop"
-        )
-        for (pkg in retailPkgs) {
-            val app = allApps.firstOrNull { it.packageName == pkg }
-            if (app != null) {
-                val btn = ImageView(this).apply {
-                    setImageDrawable(app.icon)
-                    val size = 60
-                    layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, 16, 0) }
-                    setOnClickListener {
-                        pulseHaptic()
-                        launchApp(pkg)
-                    }
-                }
-                retailRow.addView(btn)
-            }
-        }
-        card.addView(retailRow)
-
-        return card
-    }
-
-    private fun renderHouseWishlist() {
-        val container = houseItemsContainer ?: return
-        container.removeAllViews()
-        for (item in houseWishlist) {
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, 8, 0, 8)
-            }
-            val check = TextView(this).apply {
-                text = if (item.isBought) "[BOUGHT]" else "[WANTED]"
-                setTextColor(if (item.isBought) COLOR_MUTED else COLOR_WHITE)
-                textSize = 10f
-                typeface = Typeface.MONOSPACE
-                setPadding(0, 0, 14, 0)
-            }
-            val desc = TextView(this).apply {
-                text = "${item.item} (${item.cost})"
-                setTextColor(if (item.isBought) COLOR_MUTED else COLOR_TEXT)
-                textSize = 13f
-                if (item.isBought) paintFlags = paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
-            }
-            row.addView(check)
-            row.addView(desc)
-
-            row.setOnClickListener {
-                pulseHaptic()
-                item.isBought = !item.isBought
-                saveUserData()
-                renderHouseWishlist()
-            }
-            row.setOnLongClickListener {
-                pulseHaptic()
-                houseWishlist.remove(item)
-                saveUserData()
-                renderHouseWishlist()
-                true
-            }
-            container.addView(row)
-        }
-    }
-
-    private fun showAddHouseItemDialog() {
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(40, 20, 40, 20)
-        }
-        val nameInput = EditText(this).apply {
-            hint = "Item description (e.g. Oak brackets)"
-            setTextColor(COLOR_WHITE)
-            setHintTextColor(COLOR_MUTED)
-        }
-        val costInput = EditText(this).apply {
-            hint = "Estimated cost (e.g. £25.00)"
-            setTextColor(COLOR_WHITE)
-            setHintTextColor(COLOR_MUTED)
-        }
-        layout.addView(nameInput)
-        layout.addView(costInput)
-
-        AlertDialog.Builder(this)
-            .setTitle("Add House Item")
-            .setView(layout)
-            .setPositiveButton("Add") { _, _ ->
-                val name = nameInput.text.toString().trim()
-                val cost = costInput.text.toString().trim()
-                if (name.isNotEmpty()) {
-                    houseWishlist.add(HouseItem(System.currentTimeMillis(), name, if (cost.isEmpty()) "TBD" else cost, false))
-                    saveUserData()
-                    renderHouseWishlist()
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun createReadingHubModule(): View {
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(24, 20, 24, 20)
-            background = createCardDrawable(COLOR_GLASS_CARD, 16f, COLOR_BORDER)
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 0, 0, 16) }
-            layoutParams = lp
-        }
-
-        val topRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        val title = TextView(this).apply {
-            text = "READING CODEX & ANTHOLOGY"
-            setTextColor(COLOR_WHITE)
-            textSize = 12f
-            letterSpacing = 0.12f
-            typeface = Typeface.MONOSPACE
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        }
-        val editBtn = TextView(this).apply {
-            text = "[ UPDATE ]"
-            setTextColor(COLOR_MUTED)
-            textSize = 10f
-            typeface = Typeface.MONOSPACE
-            setPadding(10, 4, 10, 4)
-            setOnClickListener { showEditReadingNoteDialog() }
-        }
-        topRow.addView(title)
-        topRow.addView(editBtn)
-        card.addView(topRow)
-
-        val note = TextView(this).apply {
-            text = readingNote
+        val trackTitle = TextView(this).apply {
+            text = "Spotify Player"
             setTextColor(COLOR_TEXT)
-            textSize = 13f
-            setPadding(0, 10, 0, 14)
-        }
-        readingNoteTv = note
-        card.addView(note)
-
-        val launchBar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        val readerTools = listOf("md.obsidian", "com.amazon.kindle", "com.flyersoft.moonreader")
-        for (pkg in readerTools) {
-            val app = allApps.firstOrNull { it.packageName == pkg }
-            if (app != null) {
-                val btn = ImageView(this).apply {
-                    setImageDrawable(app.icon)
-                    val size = 60
-                    layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, 16, 0) }
-                    setOnClickListener {
-                        pulseHaptic()
-                        launchApp(pkg)
-                    }
-                }
-                launchBar.addView(btn)
-            }
-        }
-        card.addView(launchBar)
-
-        return card
-    }
-
-    private fun showEditReadingNoteDialog() {
-        val input = EditText(this).apply {
-            setText(readingNote)
-            setTextColor(COLOR_WHITE)
-            setHintTextColor(COLOR_MUTED)
-        }
-        AlertDialog.Builder(this)
-            .setTitle("Reading Progress")
-            .setView(input)
-            .setPositiveButton("Save") { _, _ ->
-                val txt = input.text.toString().trim()
-                if (txt.isNotEmpty()) {
-                    readingNote = txt
-                    readingNoteTv?.text = readingNote
-                    saveUserData()
-                }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun createOmniSearch(): View {
-        val searchBox = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(22, 12, 22, 12)
-            background = createCardDrawable(COLOR_GLASS_CARD, 14f, COLOR_BORDER)
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 0, 0, 14) }
-            layoutParams = lp
-        }
-
-        val prompt = TextView(this).apply {
-            text = "❯"
-            setTextColor(COLOR_WHITE)
-            textSize = 14f
-            typeface = Typeface.MONOSPACE
-            setPadding(0, 0, 16, 0)
-        }
-        searchBox.addView(prompt)
-
-        val sInput = EditText(this).apply {
-            hint = "Search threads, notes, or web..."
-            setHintTextColor(COLOR_MUTED)
-            setTextColor(COLOR_WHITE)
-            textSize = 13f
-            typeface = Typeface.MONOSPACE
-            background = null
-            imeOptions = EditorInfo.IME_ACTION_SEARCH
-            inputType = android.text.InputType.TYPE_CLASS_TEXT
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            setOnEditorActionListener { _, actionId, _ ->
-                if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                    val query = text.toString().trim()
-                    if (query.isNotEmpty()) {
-                        pulseHaptic()
-                        val intent = Intent(Intent.ACTION_WEB_SEARCH).apply {
-                            putExtra(SearchManager.QUERY, query)
-                        }
-                        try {
-                            startActivity(intent)
-                        } catch (_: Exception) {
-                            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=$query"))
-                            startActivity(browserIntent)
-                        }
-                        text.clear()
-                    }
-                    true
-                } else false
-            }
-        }
-        searchInput = sInput
-        searchBox.addView(sInput)
-        return searchBox
-    }
-
-    private fun createAudioDeck(): View {
-        val deck = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(22, 16, 22, 16)
-            background = createIlluminatedState(COLOR_GLASS_CARD, COLOR_GLASS_LIT, 16f, COLOR_BORDER)
-            val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 0, 0, 14) }
-            layoutParams = lp
-        }
-
-        val disc = TextView(this).apply {
-            text = "[AUDIO]"
-            setTextColor(COLOR_WHITE)
-            textSize = 11f
-            letterSpacing = 0.1f
-            typeface = Typeface.MONOSPACE
-            setPadding(0, 0, 16, 0)
-        }
-        deck.addView(disc)
-
-        val metaBox = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        }
-
-        val tTv = TextView(this).apply {
-            text = "Audio Resonator"
-            setTextColor(COLOR_WHITE)
-            textSize = 13f
+            textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
             maxLines = 1
+            setPadding(0, 6, 0, 6)
         }
-        trackTitleTv = tTv
+        trackTitleTv = trackTitle
+        actionSquare.addView(trackTitle)
 
-        val aTv = TextView(this).apply {
-            text = "Spotify • Tap to invoke"
-            setTextColor(COLOR_MUTED)
-            textSize = 11f
-            maxLines = 1
+        val buttonRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 4, 0, 0)
         }
-        trackArtistTv = aTv
 
-        metaBox.addView(tTv)
-        metaBox.addView(aTv)
-        deck.addView(metaBox)
-
-        val playToggle = TextView(this).apply {
-            text = "PLAY / PAUSE"
+        val playBtn = TextView(this).apply {
+            text = "▶ / ⏸"
             setTextColor(COLOR_WHITE)
             textSize = 11f
             typeface = Typeface.MONOSPACE
-            setPadding(12, 8, 12, 8)
-            background = createCardDrawable(COLOR_GLASS_LIT, 8f, COLOR_BORDER)
+            setPadding(12, 6, 12, 6)
+            background = createCardDrawable(COLOR_GLASS_LIT, 10f, COLOR_BORDER)
             setOnClickListener {
                 pulseHaptic()
                 val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -1212,95 +762,44 @@ class MainActivity : Activity() {
                 am.dispatchMediaKeyEvent(up)
             }
         }
-        deck.addView(playToggle)
+        buttonRow.addView(playBtn)
 
-        deck.setOnClickListener {
-            pulseHaptic()
-            val spotifyIntent = packageManager.getLaunchIntentForPackage("com.spotify.music")
-            if (spotifyIntent != null) startActivity(spotifyIntent)
-            else Toast.makeText(this, "Spotify not found", Toast.LENGTH_SHORT).show()
-        }
-
-        return deck
-    }
-
-    private fun renderTasks() {
-        val container = tasksContainer ?: return
-        container.removeAllViews()
-        for (task in taskList) {
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(20, 16, 20, 16)
-                background = createCardDrawable(COLOR_GLASS_CARD, 14f, COLOR_BORDER)
-                val lp = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { setMargins(0, 0, 0, 10) }
-                layoutParams = lp
-            }
-            val check = TextView(this).apply {
-                text = if (task.isDone) "[DONE]" else "[TODO]"
-                setTextColor(if (task.isDone) COLOR_WHITE else COLOR_MUTED)
-                textSize = 11f
-                typeface = Typeface.MONOSPACE
-                setPadding(0, 0, 16, 0)
-            }
-            val tv = TextView(this).apply {
-                text = task.text
-                setTextColor(if (task.isDone) COLOR_MUTED else COLOR_TEXT)
-                textSize = 13f
-                if (task.isDone) paintFlags = paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
-            }
-            row.addView(check)
-            row.addView(tv)
-
-            row.setOnClickListener {
-                pulseHaptic()
-                task.isDone = !task.isDone
-                saveUserData()
-                renderTasks()
-            }
-            row.setOnLongClickListener {
-                pulseHaptic()
-                taskList.remove(task)
-                saveUserData()
-                renderTasks()
-                true
-            }
-            container.addView(row)
-        }
-    }
-
-    private fun showAddTaskDialog() {
-        val input = EditText(this).apply {
-            hint = "Inscribe directive..."
+        val homeBtn = TextView(this).apply {
+            text = "HOME"
             setTextColor(COLOR_WHITE)
-            setHintTextColor(COLOR_MUTED)
-        }
-        AlertDialog.Builder(this)
-            .setTitle("New Directive")
-            .setView(input)
-            .setPositiveButton("Save") { _, _ ->
-                val txt = input.text.toString().trim()
-                if (txt.isNotEmpty()) {
-                    taskList.add(TaskItem(System.currentTimeMillis(), txt, false))
-                    saveUserData()
-                    renderTasks()
-                }
+            textSize = 11f
+            typeface = Typeface.MONOSPACE
+            setPadding(12, 6, 12, 6)
+            background = createCardDrawable(COLOR_GLASS_LIT, 10f, COLOR_BORDER)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(8, 0, 0, 0) }
+            layoutParams = lp
+            setOnClickListener {
+                pulseHaptic()
+                val homeApp = packageManager.getLaunchIntentForPackage("com.google.android.apps.chromecast.app")
+                    ?: packageManager.getLaunchIntentForPackage("io.homeassistant.companion.android")
+                if (homeApp != null) startActivity(homeApp)
+                else Toast.makeText(this, "Home app not configured", Toast.LENGTH_SHORT).show()
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+        }
+        buttonRow.addView(homeBtn)
+        actionSquare.addView(buttonRow)
+
+        row.addView(actionSquare)
+        return row
     }
 
+    // ================= 4x2 CORE FAVOURITES GRID =================
     private fun renderFavoritesGrid() {
         val grid = favoritesGridLayout ?: return
         grid.removeAllViews()
-        val favs = allApps.filter { favoritePackages.contains(it.packageName) }.take(6)
+        val favs = allApps.filter { favoritePackages.contains(it.packageName) }.take(8)
 
         if (favs.isEmpty()) {
             val emptyTv = TextView(this).apply {
-                text = "No pinned tools. Tap [ RESET DEFAULTS ] or long-press apps."
+                text = "No pinned tools. Tap [ RESET ] or long-press apps."
                 setTextColor(COLOR_MUTED)
                 textSize = 11f
                 setPadding(0, 8, 0, 8)
@@ -1310,19 +809,19 @@ class MainActivity : Activity() {
         }
 
         val displayMetrics = resources.displayMetrics
-        val screenWidth = displayMetrics.widthPixels - 140
-        val tileWidth = screenWidth / 3
+        val availableWidth = displayMetrics.widthPixels - 150
+        val tileWidth = availableWidth / 4
 
         for (app in favs) {
             val tile = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(12, 16, 12, 16)
-                background = createIlluminatedState(COLOR_GLASS_CARD, COLOR_GLASS_LIT, 14f, COLOR_BORDER)
+                setPadding(6, 10, 6, 10)
+                background = createIlluminatedState(COLOR_GLASS_CARD, COLOR_GLASS_LIT, 16f, COLOR_BORDER)
                 layoutParams = GridLayout.LayoutParams().apply {
                     width = tileWidth
                     height = ViewGroup.LayoutParams.WRAP_CONTENT
-                    setMargins(6, 6, 6, 6)
+                    setMargins(4, 4, 4, 4)
                 }
                 isClickable = true
                 isFocusable = true
@@ -1330,15 +829,15 @@ class MainActivity : Activity() {
 
             val icon = ImageView(this).apply {
                 setImageDrawable(app.icon)
-                val size = 76
-                layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, 0, 8) }
+                val size = 68
+                layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, 0, 6) }
             }
             tile.addView(icon)
 
             val name = TextView(this).apply {
                 text = app.name
                 setTextColor(COLOR_TEXT)
-                textSize = 12f
+                textSize = 11f
                 gravity = Gravity.CENTER
                 maxLines = 1
             }
@@ -1358,125 +857,14 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun renderFolders() {
-        val row = foldersRow ?: return
-        row.removeAllViews()
-        for (folder in folders) {
-            val panel = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(20, 16, 20, 16)
-                background = createIlluminatedState(COLOR_GLASS_CARD, COLOR_GLASS_LIT, 16f, COLOR_BORDER)
-                val lp = LinearLayout.LayoutParams(360, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                    setMargins(0, 0, 14, 0)
-                }
-                layoutParams = lp
-                isClickable = true
-                isFocusable = true
-            }
-
-            val headerRow = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-            }
-
-            val header = TextView(this).apply {
-                text = folder.name.uppercase()
-                setTextColor(COLOR_WHITE)
-                textSize = 11f
-                letterSpacing = 0.14f
-                typeface = Typeface.MONOSPACE
-                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            }
-            val count = TextView(this).apply {
-                text = "${folder.packages.size}"
-                setTextColor(COLOR_MUTED)
-                textSize = 11f
-                typeface = Typeface.MONOSPACE
-            }
-            headerRow.addView(header)
-            headerRow.addView(count)
-            panel.addView(headerRow)
-
-            val iconRow = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, 12, 0, 0)
-            }
-
-            val folderApps = allApps.filter { folder.packages.contains(it.packageName) }.take(4)
-            if (folderApps.isEmpty()) {
-                val emptyHint = TextView(this).apply {
-                    text = "Empty shelf"
-                    setTextColor(COLOR_MUTED)
-                    textSize = 10f
-                    typeface = Typeface.MONOSPACE
-                }
-                iconRow.addView(emptyHint)
-            } else {
-                for (app in folderApps) {
-                    val miniIcon = ImageView(this).apply {
-                        setImageDrawable(app.icon)
-                        val size = 52
-                        layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, 10, 0) }
-                    }
-                    iconRow.addView(miniIcon)
-                }
-            }
-            panel.addView(iconRow)
-
-            panel.setOnClickListener {
-                pulseHaptic()
-                showFolderDialog(folder)
-            }
-            row.addView(panel)
-        }
-    }
-
-    private fun createAppRowView(app: AppItem): View {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(18, 16, 18, 16)
-            background = createIlluminatedState(Color.TRANSPARENT, COLOR_GLASS_LIT, 12f, COLOR_BORDER)
-            isClickable = true
-            isFocusable = true
-        }
-
-        val icon = ImageView(this).apply {
-            setImageDrawable(app.icon)
-            val size = 84
-            layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, 20, 0) }
-        }
-        row.addView(icon)
-
-        val name = TextView(this).apply {
-            text = app.name
-            setTextColor(COLOR_TEXT)
-            textSize = 14f
-            letterSpacing = 0.03f
-            typeface = Typeface.DEFAULT_BOLD
-        }
-        row.addView(name)
-
-        row.setOnClickListener {
-            pulseHaptic()
-            launchApp(app.packageName)
-        }
-        row.setOnLongClickListener {
-            pulseHaptic()
-            showAppOptions(app)
-            true
-        }
-        return row
-    }
-
+    // ================= ENLARGED BOTTOM-ANCHORED ALPHABET RAIL =================
     @SuppressLint("ClickableViewAccessibility")
     private fun buildAlphabetRail(): View {
         railContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            layoutParams = FrameLayout.LayoutParams(54, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END or Gravity.BOTTOM).apply {
-                setMargins(0, 0, 6, 80)
+            layoutParams = FrameLayout.LayoutParams(64, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END or Gravity.BOTTOM).apply {
+                setMargins(0, 0, 6, 60)
             }
             setPadding(0, 12, 4, 12)
         }
@@ -1486,10 +874,10 @@ class MainActivity : Activity() {
             val tv = TextView(this).apply {
                 text = c.toString()
                 setTextColor(COLOR_MUTED)
-                textSize = 9f
+                textSize = 11.5f // Enlarged for high legibility
                 typeface = Typeface.MONOSPACE
                 gravity = Gravity.CENTER
-                setPadding(2, 1, 2, 1)
+                setPadding(4, 2, 4, 2)
             }
             railViews.add(tv)
             railContainer.addView(tv)
@@ -1555,6 +943,413 @@ class MainActivity : Activity() {
         return railContainer
     }
 
+    private fun createHouseWishlistModule(): View {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(22, 18, 22, 18)
+            background = createCardDrawable(COLOR_GLASS_CARD, 18f, COLOR_BORDER)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 0, 0, 16) }
+            layoutParams = lp
+        }
+
+        val topRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val title = TextView(this).apply {
+            text = "NEW HOUSE • PURCHASES"
+            setTextColor(COLOR_WHITE)
+            textSize = 12f
+            letterSpacing = 0.12f
+            typeface = Typeface.MONOSPACE
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val addBtn = TextView(this).apply {
+            text = "[ + ITEM ]"
+            setTextColor(COLOR_MUTED)
+            textSize = 10f
+            typeface = Typeface.MONOSPACE
+            setPadding(10, 4, 10, 4)
+            setOnClickListener { showAddHouseItemDialog() }
+        }
+        topRow.addView(title)
+        topRow.addView(addBtn)
+        card.addView(topRow)
+
+        houseItemsContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 10, 0, 10)
+        }
+        card.addView(houseItemsContainer)
+
+        val retailRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val retailPkgs = listOf(
+            "uk.co.johnlewis.android",
+            "com.amazon.mShop.android.shopping",
+            "com.ikea.inter.appshop"
+        )
+        for (pkg in retailPkgs) {
+            val app = allApps.firstOrNull { it.packageName == pkg }
+            if (app != null) {
+                val btn = ImageView(this).apply {
+                    setImageDrawable(app.icon)
+                    val size = 58
+                    layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, 14, 0) }
+                    setOnClickListener {
+                        pulseHaptic()
+                        launchApp(pkg)
+                    }
+                }
+                retailRow.addView(btn)
+            }
+        }
+        card.addView(retailRow)
+        return card
+    }
+
+    private fun renderHouseWishlist() {
+        val container = houseItemsContainer ?: return
+        container.removeAllViews()
+        for (item in houseWishlist) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, 6, 0, 6)
+            }
+            val check = TextView(this).apply {
+                text = if (item.isBought) "[BOUGHT]" else "[WANTED]"
+                setTextColor(if (item.isBought) COLOR_MUTED else COLOR_WHITE)
+                textSize = 10f
+                typeface = Typeface.MONOSPACE
+                setPadding(0, 0, 12, 0)
+            }
+            val desc = TextView(this).apply {
+                text = "${item.item} (${item.cost})"
+                setTextColor(if (item.isBought) COLOR_MUTED else COLOR_TEXT)
+                textSize = 13f
+                if (item.isBought) paintFlags = paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
+            }
+            row.addView(check)
+            row.addView(desc)
+
+            row.setOnClickListener {
+                pulseHaptic()
+                item.isBought = !item.isBought
+                saveUserData()
+                renderHouseWishlist()
+            }
+            row.setOnLongClickListener {
+                pulseHaptic()
+                houseWishlist.remove(item)
+                saveUserData()
+                renderHouseWishlist()
+                true
+            }
+            container.addView(row)
+        }
+    }
+
+    private fun showAddHouseItemDialog() {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 20, 40, 20)
+        }
+        val nameInput = EditText(this).apply {
+            hint = "Item description (e.g. Garden sleeper brackets)"
+            setTextColor(COLOR_WHITE)
+            setHintTextColor(COLOR_MUTED)
+        }
+        val costInput = EditText(this).apply {
+            hint = "Estimated cost (e.g. £24.00)"
+            setTextColor(COLOR_WHITE)
+            setHintTextColor(COLOR_MUTED)
+        }
+        layout.addView(nameInput)
+        layout.addView(costInput)
+
+        AlertDialog.Builder(this)
+            .setTitle("Add House Item")
+            .setView(layout)
+            .setPositiveButton("Add") { _, _ ->
+                val name = nameInput.text.toString().trim()
+                val cost = costInput.text.toString().trim()
+                if (name.isNotEmpty()) {
+                    houseWishlist.add(HouseItem(System.currentTimeMillis(), name, if (cost.isEmpty()) "TBD" else cost, false))
+                    saveUserData()
+                    renderHouseWishlist()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun createReadingHubModule(): View {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(22, 18, 22, 18)
+            background = createCardDrawable(COLOR_GLASS_CARD, 18f, COLOR_BORDER)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 0, 0, 16) }
+            layoutParams = lp
+        }
+
+        val topRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val title = TextView(this).apply {
+            text = "READING CODEX"
+            setTextColor(COLOR_WHITE)
+            textSize = 12f
+            letterSpacing = 0.12f
+            typeface = Typeface.MONOSPACE
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val editBtn = TextView(this).apply {
+            text = "[ UPDATE ]"
+            setTextColor(COLOR_MUTED)
+            textSize = 10f
+            typeface = Typeface.MONOSPACE
+            setPadding(10, 4, 10, 4)
+            setOnClickListener { showEditReadingNoteDialog() }
+        }
+        topRow.addView(title)
+        topRow.addView(editBtn)
+        card.addView(topRow)
+
+        val note = TextView(this).apply {
+            text = readingNote
+            setTextColor(COLOR_TEXT)
+            textSize = 13f
+            setPadding(0, 8, 0, 12)
+        }
+        readingNoteTv = note
+        card.addView(note)
+
+        val launchBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val readerTools = listOf("md.obsidian", "com.amazon.kindle", "com.flyersoft.moonreader")
+        for (pkg in readerTools) {
+            val app = allApps.firstOrNull { it.packageName == pkg }
+            if (app != null) {
+                val btn = ImageView(this).apply {
+                    setImageDrawable(app.icon)
+                    val size = 58
+                    layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, 14, 0) }
+                    setOnClickListener {
+                        pulseHaptic()
+                        launchApp(pkg)
+                    }
+                }
+                launchBar.addView(btn)
+            }
+        }
+        card.addView(launchBar)
+
+        return card
+    }
+
+    private fun showEditReadingNoteDialog() {
+        val input = EditText(this).apply {
+            setText(readingNote)
+            setTextColor(COLOR_WHITE)
+            setHintTextColor(COLOR_MUTED)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Reading Progress")
+            .setView(input)
+            .setPositiveButton("Save") { _, _ ->
+                val txt = input.text.toString().trim()
+                if (txt.isNotEmpty()) {
+                    readingNote = txt
+                    readingNoteTv?.text = readingNote
+                    saveUserData()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun createOmniSearch(): View {
+        val searchBox = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(20, 10, 20, 10)
+            background = createCardDrawable(COLOR_GLASS_CARD, 16f, COLOR_BORDER)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 8, 0, 0) }
+            layoutParams = lp
+        }
+
+        val prompt = TextView(this).apply {
+            text = "❯"
+            setTextColor(COLOR_WHITE)
+            textSize = 13f
+            typeface = Typeface.MONOSPACE
+            setPadding(0, 0, 14, 0)
+        }
+        searchBox.addView(prompt)
+
+        val sInput = EditText(this).apply {
+            hint = "Search threads, notes, web..."
+            setHintTextColor(COLOR_MUTED)
+            setTextColor(COLOR_WHITE)
+            textSize = 13f
+            typeface = Typeface.MONOSPACE
+            background = null
+            imeOptions = EditorInfo.IME_ACTION_SEARCH
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                    val query = text.toString().trim()
+                    if (query.isNotEmpty()) {
+                        pulseHaptic()
+                        val intent = Intent(Intent.ACTION_WEB_SEARCH).apply {
+                            putExtra(SearchManager.QUERY, query)
+                        }
+                        try {
+                            startActivity(intent)
+                        } catch (_: Exception) {
+                            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=$query"))
+                            startActivity(browserIntent)
+                        }
+                        text.clear()
+                    }
+                    true
+                } else false
+            }
+        }
+        searchBox.addView(sInput)
+        return searchBox
+    }
+
+    private fun renderTasks() {
+        val container = tasksContainer ?: return
+        container.removeAllViews()
+        for (task in taskList) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(18, 14, 18, 14)
+                background = createCardDrawable(COLOR_GLASS_CARD, 14f, COLOR_BORDER)
+                val lp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, 0, 0, 8) }
+                layoutParams = lp
+            }
+            val check = TextView(this).apply {
+                text = if (task.isDone) "[DONE]" else "[TODO]"
+                setTextColor(if (task.isDone) COLOR_WHITE else COLOR_MUTED)
+                textSize = 10f
+                typeface = Typeface.MONOSPACE
+                setPadding(0, 0, 14, 0)
+            }
+            val tv = TextView(this).apply {
+                text = task.text
+                setTextColor(if (task.isDone) COLOR_MUTED else COLOR_TEXT)
+                textSize = 13f
+                if (task.isDone) paintFlags = paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
+            }
+            row.addView(check)
+            row.addView(tv)
+
+            row.setOnClickListener {
+                pulseHaptic()
+                task.isDone = !task.isDone
+                saveUserData()
+                renderTasks()
+                quickNoteSnippetTv?.text = if (taskList.isNotEmpty()) taskList.first().text else "No active directives."
+            }
+            row.setOnLongClickListener {
+                pulseHaptic()
+                taskList.remove(task)
+                saveUserData()
+                renderTasks()
+                quickNoteSnippetTv?.text = if (taskList.isNotEmpty()) taskList.first().text else "No active directives."
+                true
+            }
+            container.addView(row)
+        }
+    }
+
+    private fun showAddTaskDialog() {
+        val input = EditText(this).apply {
+            hint = "Inscribe directive..."
+            setTextColor(COLOR_WHITE)
+            setHintTextColor(COLOR_MUTED)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("New Directive")
+            .setView(input)
+            .setPositiveButton("Save") { _, _ ->
+                val txt = input.text.toString().trim()
+                if (txt.isNotEmpty()) {
+                    taskList.add(TaskItem(System.currentTimeMillis(), txt, false))
+                    saveUserData()
+                    renderTasks()
+                    quickNoteSnippetTv?.text = if (taskList.isNotEmpty()) taskList.first().text else "No active directives."
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun createAppRowView(app: AppItem): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(18, 14, 18, 14)
+            background = createIlluminatedState(Color.TRANSPARENT, COLOR_GLASS_LIT, 12f, COLOR_BORDER)
+            isClickable = true
+            isFocusable = true
+        }
+
+        val icon = ImageView(this).apply {
+            setImageDrawable(app.icon)
+            val size = 80
+            layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, 18, 0) }
+        }
+        row.addView(icon)
+
+        val name = TextView(this).apply {
+            text = app.name
+            setTextColor(COLOR_TEXT)
+            textSize = 14f
+            letterSpacing = 0.03f
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        row.addView(name)
+
+        row.setOnClickListener {
+            pulseHaptic()
+            launchApp(app.packageName)
+        }
+        row.setOnLongClickListener {
+            pulseHaptic()
+            showAppOptions(app)
+            true
+        }
+        return row
+    }
+
     private fun showAppDrawer(filterChar: Char? = null) {
         if (drawerLayout.visibility != View.VISIBLE) {
             drawerLayout.visibility = View.VISIBLE
@@ -1613,60 +1408,32 @@ class MainActivity : Activity() {
         allApps = loadInstalledApps()
         sanitizeSavedData()
         renderFavoritesGrid()
-        renderFolders()
         renderTasks()
         renderHouseWishlist()
     }
 
     private fun showAppOptions(app: AppItem) {
         val isFav = favoritePackages.contains(app.packageName)
-        val favLabel = if (isFav) "Unpin from 2x3 Grid" else "Pin to 2x3 Grid (Max 6)"
-        val opts = arrayOf(favLabel, "Add to Shelf")
+        val favLabel = if (isFav) "Unpin from Favourites" else "Pin to Favourites (Max 8)"
 
         AlertDialog.Builder(this)
             .setTitle(app.name)
-            .setItems(opts) { _, which ->
-                when (which) {
-                    0 -> {
-                        if (isFav) favoritePackages.remove(app.packageName)
-                        else if (favoritePackages.size < 6) favoritePackages.add(app.packageName)
-                        else Toast.makeText(this, "2x3 Grid full (Max 6)", Toast.LENGTH_SHORT).show()
-                        saveUserData()
-                        renderFavoritesGrid()
-                    }
-                    1 -> {
-                        val names = folders.map { it.name }.toTypedArray()
-                        AlertDialog.Builder(this)
-                            .setTitle("Select Shelf")
-                            .setItems(names) { _, fIndex ->
-                                val f = folders[fIndex]
-                                if (!f.packages.contains(app.packageName)) {
-                                    f.packages.add(app.packageName)
-                                    saveUserData()
-                                    renderFolders()
-                                }
-                            }.show()
-                    }
+            .setItems(arrayOf(favLabel)) { _, which ->
+                if (which == 0) {
+                    if (isFav) favoritePackages.remove(app.packageName)
+                    else if (favoritePackages.size < 8) favoritePackages.add(app.packageName)
+                    else Toast.makeText(this, "Favourites grid full (Max 8)", Toast.LENGTH_SHORT).show()
+                    saveUserData()
+                    renderFavoritesGrid()
                 }
             }.show()
     }
 
-    private fun showFolderDialog(folder: FolderItem) {
-        val apps = allApps.filter { folder.packages.contains(it.packageName) }
-        val names = apps.map { it.name }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(folder.name)
-            .apply {
-                if (names.isEmpty()) setMessage("Shelf empty. Long-press any app to bind it.")
-                else setItems(names) { _, w -> launchApp(apps[w].packageName) }
-            }
-            .setPositiveButton("Close", null)
-            .show()
-    }
-
     private fun launchApp(pkg: String) {
         try {
-            val intent = packageManager.getLaunchIntentForPackage(pkg)
+            val intent = packageManager.getLaunchIntentForPackage(pkg)?.apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+            }
             if (intent != null) startActivity(intent)
         } catch (_: Exception) {
             Toast.makeText(this, "Unable to launch", Toast.LENGTH_SHORT).show()
