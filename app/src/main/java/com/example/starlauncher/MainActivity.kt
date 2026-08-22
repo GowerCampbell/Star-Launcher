@@ -138,7 +138,11 @@ class MainActivity : Activity() {
             addAction("com.spotify.music.playbackstatechanged")
             addAction("com.spotify.music.metadatachanged")
         }
-        registerReceiver(systemReceiver, filter)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(systemReceiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(systemReceiver, filter)
+        }
         updateClockAndSleepData()
         refreshAll()
     }
@@ -263,9 +267,7 @@ class MainActivity : Activity() {
                 val view = if (viewType == 0) buildMainStationPage() else buildDirectivesPage()
                 return object : RecyclerView.ViewHolder(view) {}
             }
-            override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-                // Layout bindings are updated dynamically via refreshAll
-            }
+            override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {}
         }
 
         viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
@@ -357,7 +359,6 @@ class MainActivity : Activity() {
         val alphabetRail = buildAlphabetRail()
         rootLayout.addView(alphabetRail)
 
-        // Window insets to keep status bar clean
         ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { _, insets ->
             val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             pageIndicatorTv.translationY = statusBarHeight.toFloat()
@@ -428,7 +429,7 @@ class MainActivity : Activity() {
             )
             lp.setMargins(0, 0, 0, 18)
             layoutParams = lp
-            setOnTouchListener { _, event ->
+            setOnTouchListener { _, _ ->
                 parent.requestDisallowInterceptTouchEvent(true)
                 false
             }
