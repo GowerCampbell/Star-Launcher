@@ -301,7 +301,7 @@ class MainActivity : Activity() {
             "com.bandlab.bandlab",
             "com.github.android",
             "com.thetrainline",
-            "com.google.android.apps.chromecast.app", // Google Home
+            "com.google.android.apps.chromecast.app",
             "com.google.android.GoogleCamera",
             "com.android.settings"
         )
@@ -321,7 +321,7 @@ class MainActivity : Activity() {
 
         saveUserData()
         renderFavoritesGrid()
-        Toast.makeText(this, "Core 8 Apps reset to defaults", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this@MainActivity, "Core 8 Apps reset to defaults", Toast.LENGTH_SHORT).show()
     }
 
     private fun buildSlideInterface() {
@@ -480,13 +480,9 @@ class MainActivity : Activity() {
             )
         }
 
-        // 1. Pixel At-A-Glance Chrono & Status
         layout.addView(createAtAGlanceHeader())
-
-        // 2. iOS-Style Square Stack (2 Columns: Directives Note on Left, Media & Home on Right)
         layout.addView(createSmartSquareStack())
 
-        // 3. Core Apps 4x2 Fixed Grid (Thumb Zone)
         val favHeaderRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -525,7 +521,6 @@ class MainActivity : Activity() {
         favoritesGridLayout = grid
         layout.addView(grid)
 
-        // 4. Quick Omni-Search Bar (Anchored at base)
         layout.addView(createOmniSearch())
 
         renderFavoritesGrid()
@@ -661,18 +656,18 @@ class MainActivity : Activity() {
         return container
     }
 
-    // ================= IOS-STYLE SMART SQUARE STACK =================
+    // ================= SMART SQUARE STACK =================
     private fun createSmartSquareStack(): View {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             val lp = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                310 // Ergonomic square widget height
+                310
             ).apply { setMargins(0, 4, 0, 8) }
             layoutParams = lp
         }
 
-        // Left 2x2 Square: Directives / Quick Notes Scratchpad
+        // Left 2x2 Square: Directives Scratchpad
         val noteSquare = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20, 18, 20, 18)
@@ -705,7 +700,7 @@ class MainActivity : Activity() {
         noteSquare.addView(noteBody)
         noteSquare.setOnClickListener {
             pulseHaptic()
-            viewPager.currentItem = 1 // Swipe directly to directives page
+            viewPager.currentItem = 1
         }
         row.addView(noteSquare)
 
@@ -781,7 +776,7 @@ class MainActivity : Activity() {
                 val homeApp = packageManager.getLaunchIntentForPackage("com.google.android.apps.chromecast.app")
                     ?: packageManager.getLaunchIntentForPackage("io.homeassistant.companion.android")
                 if (homeApp != null) startActivity(homeApp)
-                else Toast.makeText(this, "Home app not configured", Toast.LENGTH_SHORT).show()
+                else Toast.makeText(this@MainActivity, "Home app not configured", Toast.LENGTH_SHORT).show()
             }
         }
         buttonRow.addView(homeBtn)
@@ -874,7 +869,7 @@ class MainActivity : Activity() {
             val tv = TextView(this).apply {
                 text = c.toString()
                 setTextColor(COLOR_MUTED)
-                textSize = 11.5f // Enlarged for high legibility
+                textSize = 11.5f
                 typeface = Typeface.MONOSPACE
                 gravity = Gravity.CENTER
                 setPadding(4, 2, 4, 2)
@@ -1422,7 +1417,7 @@ class MainActivity : Activity() {
                 if (which == 0) {
                     if (isFav) favoritePackages.remove(app.packageName)
                     else if (favoritePackages.size < 8) favoritePackages.add(app.packageName)
-                    else Toast.makeText(this, "Favourites grid full (Max 8)", Toast.LENGTH_SHORT).show()
+                    else Toast.makeText(this@MainActivity, "Favourites grid full (Max 8)", Toast.LENGTH_SHORT).show()
                     saveUserData()
                     renderFavoritesGrid()
                 }
@@ -1436,7 +1431,7 @@ class MainActivity : Activity() {
             }
             if (intent != null) startActivity(intent)
         } catch (_: Exception) {
-            Toast.makeText(this, "Unable to launch", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@MainActivity, "Unable to launch", Toast.LENGTH_SHORT).show()
         }
     }
 
