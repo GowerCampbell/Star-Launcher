@@ -153,7 +153,7 @@ class MainActivity : Activity() {
                 ShelfFolder("Comms & Messaging", mutableListOf("com.google.android.apps.messaging", "com.google.android.dialer", "com.whatsapp", "com.discord")),
                 ShelfFolder("Reading & Codex", mutableListOf("md.obsidian", "com.amazon.kindle", "com.flyersoft.moonreader")),
                 ShelfFolder("Banking & HSBC", mutableListOf("uk.co.hsbc.hsbcukmobilebanking", "com.monzo.android")),
-                ShelfFolder("Development & Shell", mutableListOf("com.termux", "com.github.android", "io.github.gedoor.qreader")),
+                ShelfFolder("Development & Shell", mutableListOf("com.termux", "com.github.android")),
                 ShelfFolder("Transit & Maps", mutableListOf("com.trainpal", "com.thetrainline", "com.google.android.apps.maps"))
             )
         }
@@ -293,7 +293,7 @@ class MainActivity : Activity() {
         }
         rootLayout.addView(floatingBadge)
 
-        // ================= ENLARGED BOTTOM-ONLY ALPHABET RAIL =================
+        // ================= ENLARGED BOTTOM-ANCHORED ALPHABET RAIL =================
         val alphabetRail = buildAlphabetRail()
         rootLayout.addView(alphabetRail)
 
