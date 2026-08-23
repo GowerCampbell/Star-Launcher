@@ -1,3 +1,4 @@
+Here is the updated EdgeScrubberService.kt with the haptic vibration method fixed to support both API 29+ (EFFECT_CLICK) and API 31+ (EFFECT_TEXTURE_TICK) safely without compile errors.
 package com.example.starlauncher
 
 import android.annotation.SuppressLint
@@ -87,8 +88,10 @@ class EdgeScrubberService : Service() {
 
     private fun triggerPixelHaptic() {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TEXTURE_TICK))
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
             } else {
                 @Suppress("DEPRECATION")
                 vibrator?.vibrate(6)
@@ -400,3 +403,4 @@ class EdgeScrubberService : Service() {
         }
     }
 }
+
