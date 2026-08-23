@@ -1,4 +1,3 @@
-Here is the updated EdgeScrubberService.kt with the haptic vibration method fixed to support both API 29+ (EFFECT_CLICK) and API 31+ (EFFECT_TEXTURE_TICK) safely without compile errors.
 package com.example.starlauncher
 
 import android.annotation.SuppressLint
